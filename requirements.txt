@@ -1,0 +1,9 @@
+certifi==2025.7.14
+charset-normalizer==3.4.2
+datadog-api-client==2.40.0
+idna==3.10
+python-dateutil==2.9.0.post0
+requests==2.32.4
+six==1.17.0
+typing_extensions==4.14.1
+urllib3==2.5.0

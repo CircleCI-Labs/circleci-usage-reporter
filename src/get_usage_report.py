@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Import modules
 import os
 import requests

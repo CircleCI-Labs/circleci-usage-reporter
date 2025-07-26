@@ -48,6 +48,37 @@ To learn more about graphs using python, check out [Matplotlib](https://matplotl
 - An organisation ID is required. This defaults to the ID of the organisation that is executing the job on CircleCI.
 - If sending metrics to Datadog, then a `DATADOG_API_KEY` is required.
 
+## Docker Usage
+
+To build the Docker image:
+
+```sh
+docker build --tag circleci-usage-api-exporter ./
+```
+
+To run the container (set environment variables as needed):
+
+```sh
+docker run --rm \
+  --env CIRCLECI_API_TOKEN=your_token \
+  --env DATADOG_API_KEY=your_datadog_key \
+  --env DATADOG_SITE=your_datadog_site \
+  --env START_DATE=2025-07-22 \
+  --env END_DATE=2025-07-23 \
+  --env MERGE_USAGE_REPORTS=false \
+  --env ORG_ID=your_org_id \
+  --env SEND_TO_DATADOG=true \
+  circleci-usage-api-exporter
+```
+
+or
+
+```sh
+docker run --env-file .env --rm circleci-usage-api-exporter
+```
+
+Adjust the environment variables as required for your use case.
+
 ### Caveats
 
 - My python skillz aren't great.
