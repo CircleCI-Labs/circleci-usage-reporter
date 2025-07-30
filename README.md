@@ -63,8 +63,6 @@ docker run --rm \
   --env CIRCLECI_API_TOKEN=your_token \
   --env DATADOG_API_KEY=your_datadog_key \
   --env DATADOG_SITE=your_datadog_site \
-  --env START_DATE=2025-07-22 \
-  --env END_DATE=2025-07-23 \
   --env MERGE_USAGE_REPORTS=false \
   --env ORG_ID=your_org_id \
   --env SEND_TO_DATADOG=true \

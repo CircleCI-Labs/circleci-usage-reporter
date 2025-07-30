@@ -7,15 +7,30 @@ import time
 import gzip
 import sys
 
+from datetime import datetime, timedelta, timezone
+
+
+# Default time period is 1 day
+today = datetime.today()
+yesterday = today + timedelta(days=-1)
+
+today_utc = today.astimezone(timezone.utc)
+yesterday_utc = yesterday.astimezone(timezone.utc)
+
+today_utc = today_utc.isoformat()[:-13]
+yesterday_utc = yesterday_utc.isoformat()[:-13]
+
 # Build data to send with requests
 ORG_ID = os.getenv('ORG_ID')
 CIRCLECI_TOKEN = os.getenv('CIRCLECI_API_TOKEN')
+os.environ.setdefault("START_DATE", yesterday_utc)
+os.environ.setdefault("END_DATE", today_utc)
 START_DATE = os.getenv('START_DATE')
 END_DATE = os.getenv('END_DATE')
 
 post_data = {
-    "start": f"{START_DATE}T00:00:01Z",
-    "end": f"{END_DATE}T00:00:01Z",
+    "start": f"{START_DATE}Z",
+    "end": f"{END_DATE}Z",
     "shared_org_ids": []
 }
 
@@ -50,16 +65,16 @@ if response.status_code == 201:
             print("Report generated. Now Downloading...")
             download_urls = report.get("download_urls", [])
 
-            if not os.path.exists("reports"):
+            if not os.path.exists("/tmp/reports"):
                 os.makedirs("/tmp/reports")
             
             for idx, url in enumerate(download_urls):
                 r = requests.get(url)
-                with open(f"/tmp/usage_report_{idx}.csv.gz", "wb") as f:
+                with open(f"/tmp/usage_report_{idx}_{today_utc}.csv.gz", "wb") as f:
                     f.write(r.content)
                 
-                with gzip.open(f"/tmp/usage_report_{idx}.csv.gz", "rb") as f_in:
-                    with open(f"/tmp/reports/usage_report_{idx}.csv", "wb") as f_out:
+                with gzip.open(f"/tmp/usage_report_{idx}_{today_utc}.csv.gz", "rb") as f_in:
+                    with open(f"/tmp/reports/usage_report_{idx}_{today_utc}.csv", "wb") as f_out:
                         f_out.write(f_in.read())
 
                 print(f"File {idx} downloaded and extracted")

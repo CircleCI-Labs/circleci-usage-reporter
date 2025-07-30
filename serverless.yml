@@ -1,0 +1,40 @@
+frameworkVersion: '3'
+service: circleci-usage-api-exporter
+
+custom:
+  parsedSecrets:
+    circleciUsageApiExporterSecret: ${ssm:/aws/reference/secretsmanager//medallion/circleci-usage-api-exporter}
+
+provider:
+  name: aws
+  runtime: python3.10
+  region: us-west-2
+  timeout: 900
+  ecr:
+    images:
+      circleci_usage_api_exporter:
+        path: ./
+
+
+functions:
+  circleci_usage_api_exporter:
+    name: circleci-usage-api-exporter
+    image:
+      name: circleci_usage_api_exporter
+    environment:
+      CIRCLECI_API_TOKEN: ${self:custom.parsedSecrets.circleciUsageApiExporterSecret.CIRCLECI_TOKEN}
+      DATADOG_API_KEY:  ${self:custom.parsedSecrets.circleciUsageApiExporterSecret.DD_API_KEY}
+      DATADOG_SITE: datadoghq.com
+      MERGE_USAGE_REPORTS: false
+      ORG_ID: b7800015-71e0-4c65-9883-9c777d8b197e
+      SEND_TO_DATADOG: true
+    events:
+      - schedule: rate(1 hour) #TODO rate(1 day)
+
+plugins:
+  - serverless-python-requirements
+
+# setting individually: true is required to resolve the following error: ERR_INVALID_ARG_TYPE when using ECR config
+# see more: https://github.com/serverless/serverless-python-requirements/issues/774
+package:
+  individually: true

@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-ENV DATADOG_SITE=datadoghq.eu
+ENV DATADOG_SITE=datadoghq.com
 
 WORKDIR /app
 
