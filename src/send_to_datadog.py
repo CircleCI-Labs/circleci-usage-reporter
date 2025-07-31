@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Lightweight script to process a CSV file and send metrics to Datadog API.
-Usage: python send_to_datadog.py <path_to_csv> [--api-key <key>] [--batch-size <size>] [--site <site>]
 """
 
 import os, csv, argparse, time, math
@@ -19,12 +18,21 @@ from datadog_api_client.v2.model.metric_series import MetricSeries
 from datadog_api_client.v1.model.event_create_request import EventCreateRequest
 
 
+os.environ.setdefault("BATCH_SIZE", '100')
+os.environ.setdefault("SEND_EVENTS", "false")
+os.environ.setdefault("DATADOG_SITE", "datadoghq.com")
+
+BATCH_SIZE = os.getenv('BATCH_SIZE')
+SEND_EVENTS = os.getenv('SEND_EVENTS')
+DATADOG_SITE = os.getenv('DATADOG_SITE')
+
+
 class DatadogCSVIngest:
     """Process CSV data and send to Datadog."""
     
-    def __init__(self, api_key=None, application_key=None, site="datadoghq.eu"):
+    def __init__(self, api_key=None, application_key=None, site=DATADOG_SITE):
         """Set up Datadog client with API credentials."""
-        self.api_key = api_key or os.environ.get("DATADOG_API_KEY")
+        self.api_key = api_key or os.getenv('DATADOG_API_KEY')
         self.application_key = application_key or os.environ.get("DATADOG_APP_KEY")
         
         if not self.api_key:
@@ -254,38 +262,20 @@ class DatadogCSVIngest:
         return results
 
 
-def main():
-    """Run the script."""
-    parser = argparse.ArgumentParser(description='Process a CSV file and send to Datadog.')
-    parser.add_argument('csv_file', help='Path to the CSV file')
-    parser.add_argument('--api-key', help='Datadog API key')
-    parser.add_argument('--application-key', help='Datadog Application key')
-    parser.add_argument('--events', action='store_true', help='Send events to Datadog')
-    parser.add_argument('--dry-run', action='store_true', help='Process without sending')
-    parser.add_argument('--batch-size', type=int, default=100, help='Batch size (default: 100)')
-    parser.add_argument('--site', default='datadoghq.eu', 
-                       choices=['datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com'],
-                       help='Datadog site (default: datadoghq.eu)')
-    
-    args = parser.parse_args()
-    
+def main(csv_file):
     try:
         # Initialize ingestor
-        ingestor = DatadogCSVIngest(args.api_key, args.application_key, args.site)
-        print(f"Sending to Datadog site: {args.site}")
+        ingestor = DatadogCSVIngest()
+        print(f"Sending to Datadog site: {DATADOG_SITE}")
         
         # Process CSV
-        print(f"Processing CSV: {args.csv_file}")
-        data = ingestor.process_csv(args.csv_file)
+        print(f"Processing CSV: {csv_file}")
+        data = ingestor.process_csv(csv_file)
         total_rows = len(data)
         print(f"Processed {total_rows} rows")
         
-        if args.dry_run:
-            print("Dry run - not sending to Datadog")
-            return 0
-        
         # Process in batches
-        batch_size = args.batch_size
+        batch_size = int(BATCH_SIZE)
         row_index = 0
         batch_number = 1
         
@@ -307,7 +297,7 @@ def main():
                     print("Metrics sent successfully")
                     
                     # Send events if requested
-                    if args.events:
+                    if SEND_EVENTS.lower() == "true":
                         print("Sending events...")
                         events = ingestor.send_events(batch)
                         print(f"Sent {len(events)} events")
@@ -346,7 +336,3 @@ def main():
         return 1
         
     return 0
-
-
-if __name__ == "__main__":
-    exit(main())
