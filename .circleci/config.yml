@@ -147,6 +147,23 @@ jobs:
       - store_artifacts:
           path: /tmp/reports
 
+  send-metrics-to-doit:
+    docker:
+      - image: cimg/python:3.13.1
+    resource_class: small
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - run:
+          name: Install dependencies
+          command: |
+            pip3 install -r requirements.txt
+      - run:
+          name: Send metrics to DoiT
+          command: |
+            python ./src/send_to_doit.py /tmp/merged.csv
+
 workflows:
   use-usage-api:
     jobs:
