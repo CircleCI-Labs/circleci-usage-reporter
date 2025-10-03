@@ -1,0 +1,67 @@
+# Git and version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation and examples
+*.md
+!README.md
+docs/
+examples/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+circleci_usage_toolkit.egg-info/
+
+# Data files (exclude large CSV files)
+*.csv
+usage_report_*.csv
+
+# Backup files
+*.backup
+setup.py.backup
+
+# Notebooks and temporary files
+*.ipynb
+notebook.ipynb
+.ipynb_checkpoints/
+
+# Test files
+tests/
+test_*
+*_test.py
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
