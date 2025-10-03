@@ -40,3 +40,4 @@ workflows:
   testing:
     jobs:
       - lint-and-test
+      - build-docker-image
