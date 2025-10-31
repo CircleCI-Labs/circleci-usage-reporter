@@ -22,7 +22,22 @@ jobs:
           command: |
             make test
 
+  build-docker-image:
+    docker:
+      - image: cimg/base:2023.04
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build docker image
+          command: docker build . -t usage-reporter:latest
+      - run:
+          name: Simple test image is functional
+          command: docker run --rm usage-reporter -c "print(\"hello world\")"
+
 workflows:
   testing:
     jobs:
       - lint-and-test
+      - build-docker-image
