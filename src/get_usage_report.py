@@ -50,8 +50,8 @@ if response.status_code == 201:
             print("Report generated. Now Downloading...")
             download_urls = report.get("download_urls", [])
 
-            if not os.path.exists("reports"):
-                os.makedirs("/tmp/reports")          
+            os.makedirs("/tmp/reports", exist_ok=True)
+
             for idx, url in enumerate(download_urls):
                 r = requests.get(url)
                 with open(f"/tmp/usage_report_{idx}.csv.gz", "wb") as f:
