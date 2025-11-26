@@ -1144,6 +1144,3 @@ def initialize_notebook(setup_display=True, setup_plots=True, setup_styles=True)
         'plot_executor_comparison_chart': plot_executor_comparison_chart,
         'plot_resource_class_heatmap': plot_resource_class_heatmap,
     }
-
-
-    
