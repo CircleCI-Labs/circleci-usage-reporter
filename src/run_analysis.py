@@ -33,12 +33,12 @@ ANALYSIS_TYPES = {
         'title': 'Project Analysis Report'
     },
     'compute-credits': {
-        'notebook': 'compute-credits-by-project.ipynb',
+        'notebook': 'compute_credits_by_project.ipynb',
         'output': 'compute-credits-report.html',
         'title': 'Compute Credits Report'
     },
     'resource': {
-        'notebook': 'resource_analysis.ipynb',
+        'notebook': 'resource_class_analysis.ipynb',
         'output': 'resource-utilization-report.html',
         'title': 'Resource Utilization Report'
     }
@@ -119,20 +119,24 @@ def find_highest_credit_project(csv_path="/tmp/merged.csv"):
 
 def run_existing_notebook_with_params(analysis_type, project_name=None, individual_job_name=None, credit_cost=0.0006):
     """
-    Run existing simplified notebook with parameters set via environment variables.
-    Falls back to creating a minimal notebook if the simplified version doesn't exist.
+    Run existing notebook with parameters set via environment variables.
+    Falls back to creating a minimal notebook if the notebook doesn't exist.
     """
     notebook_mapping = {
-        'job': 'job_analysis_simplified.ipynb',
-        'project': 'project_analysis_simplified.ipynb',
-        'compute-credits': 'compute_credits_simplified.ipynb',
-        'resource': 'resource_analysis_simplified.ipynb'
+        'job': 'job_analysis.ipynb',
+        'project': 'project_analysis.ipynb',
+        'compute-credits': 'compute_credits_by_project.ipynb',
+        'resource': 'resource_class_analysis.ipynb'
     }
     
     notebook_file = notebook_mapping.get(analysis_type)
     
-    if notebook_file and Path(notebook_file).exists():
-        print(f"Using existing simplified notebook: {notebook_file}")
+    # Look for notebook in src directory (relative to script location)
+    script_dir = Path(__file__).parent
+    notebook_path = script_dir / notebook_file
+    
+    if notebook_file and notebook_path.exists():
+        print(f"Using existing notebook: {notebook_path}")
         
         # Set environment variables for the notebook
         env_vars = {
@@ -150,9 +154,11 @@ def run_existing_notebook_with_params(analysis_type, project_name=None, individu
             os.environ[key] = value
             
         print(f"Set environment variables: {env_vars}")
-        return notebook_file
+        return str(notebook_path)
     else:
-        print("Simplified notebook not found, creating minimal notebook")
+        if notebook_file:
+            print(f"Notebook not found at: {notebook_path}")
+        print("Creating minimal notebook from scratch")
         return create_minimal_notebook(analysis_type, project_name, individual_job_name, credit_cost)
 
 
