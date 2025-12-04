@@ -34,7 +34,7 @@ jobs:
           command: docker build . -t usage-reporter:latest
       - run:
           name: Simple test image is functional
-          command: docker run --rm usage-reporter -c "print(\"hello world\")"
+          command: docker run --rm usage-reporter --help
 
 workflows:
   testing:
