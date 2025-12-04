@@ -7,6 +7,7 @@ A unified command-line interface for CircleCI usage data extraction and processi
 import argparse
 import sys
 
+
 def create_parser():
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(

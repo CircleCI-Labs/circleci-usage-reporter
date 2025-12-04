@@ -3,7 +3,6 @@
 Get CircleCI usage report from the API.
 """
 
-import argparse
 import gzip
 import json
 import os
