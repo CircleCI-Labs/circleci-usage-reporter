@@ -890,40 +890,75 @@ def run_notebook_conversion(notebook_path, output_dir, analysis_type):
         sys.exit(1)
 
 
-def main():
-    """Main execution function."""
-    parser = argparse.ArgumentParser(description='Run CircleCI Usage Analysis')
-    parser.add_argument('--type', choices=['job', 'project', 'compute-credits', 'resource'], required=True,
-                        help='Type of analysis to run')
-    parser.add_argument('--project', help='Project name to analyze (auto-detected if not provided)')
-    parser.add_argument('--job', default='deploy', help='Individual job name to analyze (for job analysis)')
-    parser.add_argument('--credit-cost', type=float, default=0.0006, help='Cost per credit in dollars')
-    parser.add_argument('--data-file', default='/tmp/merged.csv', help='Path to the data file')
-    
-    args = parser.parse_args()
-    
+def add_parser(subparsers):
+    """Add run-analysis command parser."""
+    parser = subparsers.add_parser(
+        'run-analysis',
+        help='Run CircleCI usage analysis and generate reports'
+    )
+    parser.add_argument(
+        '--type',
+        required=True,
+        choices=['job', 'project', 'compute-credits', 'resource'],
+        help='Type of analysis to run'
+    )
+    parser.add_argument(
+        '--project',
+        help='Project name to filter analysis (optional)'
+    )
+    parser.add_argument(
+        '--job',
+        default='deploy',
+        help='Job name to filter analysis (optional, only for job analysis)'
+    )
+    parser.add_argument(
+        '--input',
+        dest='data_file',
+        default='/tmp/reports/merged.csv',
+        help='Input CSV file path (default: /tmp/reports/merged.csv)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        default='/tmp/reports',
+        help='Output directory for generated reports (default: /tmp/reports)'
+    )
+    parser.add_argument(
+        '--credit-cost',
+        type=float,
+        default=0.0006,
+        help='Cost per credit in dollars (default: 0.0006)'
+    )
+    return parser
+
+
+def handle(args):
+    """Execute the run-analysis command."""
     # Validate data file exists
     if not Path(args.data_file).exists():
-        print(f"❌ Data file not found: {args.data_file}")
-        print("Please ensure the merged.csv file is available")
-        sys.exit(1)
+        print(f"❌ Data file not found: {args.data_file}", file=sys.stderr)
+        print("Please ensure the merged.csv file is available", file=sys.stderr)
+        return 1
     
     print(f"🚀 Starting {ANALYSIS_TYPES[args.type]['title']}")
     print("=" * 60)
     
     # Setup environment
     output_dir = setup_environment()
+    if args.output_dir != '/tmp/reports':
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
     
     # Determine project name
-    if args.type in ['job', 'project', 'resource'] and not args.project:
+    project_name = args.project
+    if args.type in ['job', 'project', 'resource'] and not project_name:
         print("Auto-detecting project with highest credit usage...")
-        args.project = find_highest_credit_project(args.data_file)
+        project_name = find_highest_credit_project(args.data_file)
     
     # Create minimal notebook using the analysis library
     print(f"Creating {args.type} analysis notebook...")
     notebook_path = run_existing_notebook_with_params(
         analysis_type=args.type,
-        project_name=args.project,
+        project_name=project_name,
         individual_job_name=args.job,
         credit_cost=args.credit_cost
     )
@@ -938,6 +973,15 @@ def main():
     
     print(f"\n✅ Analysis complete!")
     print(f"📊 View the report at: {output_file}")
+    return 0
+
+
+def main():
+    """Main execution function."""
+    parser = argparse.ArgumentParser(description='Run CircleCI Usage Analysis')
+    add_parser(parser)
+    args = parser.parse_args()
+    sys.exit(handle(args))
 
 
 if __name__ == "__main__":

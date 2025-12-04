@@ -1,3 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "circleci-usage-reporter"
+version = "1.0.0"
+description = "Tools for extracting, processing, and visualizing CircleCI usage data"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "CircleCI Labs"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "requests>=2.32.0",
+    "pandas>=2.3.0",
+    "matplotlib>=3.10.0",
+    "datadog-api-client>=2.40.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/CircleCI-Labs/circleci-usage-reporter"
+Repository = "https://github.com/CircleCI-Labs/circleci-usage-reporter"
+
+[project.scripts]
+circleci-usage-reporter = "src.cli:main"
+
+[tool.setuptools]
+packages = ["src", "src.loaders"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]

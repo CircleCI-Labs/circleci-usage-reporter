@@ -1,4 +1,9 @@
-# Import modules
+#!/usr/bin/env python3
+"""
+Get CircleCI usage report from the API.
+"""
+
+import argparse
 import gzip
 import json
 import os
@@ -7,73 +12,134 @@ import time
 
 import requests
 
-# Build data to send with requests
-ORG_ID = os.getenv('ORG_ID')
-CIRCLECI_TOKEN = os.getenv('CIRCLECI_API_TOKEN')
-START_DATE = os.getenv('START_DATE')
-END_DATE = os.getenv('END_DATE')
 
-post_data = {
-    "start": f"{START_DATE}T00:00:01Z",
-    "end": f"{END_DATE}T00:00:01Z",
-    "shared_org_ids": []
-}
+def add_parser(subparsers):
+    """Add get command parser."""
+    parser = subparsers.add_parser(
+        'get',
+        help='Request and download a CircleCI usage report'
+    )
+    parser.add_argument(
+        '--org-id',
+        required=True,
+        help='CircleCI organization ID'
+    )
+    parser.add_argument(
+        '--start-date',
+        required=True,
+        help='Start date (YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '--end-date',
+        required=True,
+        help='End date (YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '--api-token',
+        help='CircleCI API token (or set CIRCLECI_API_TOKEN env var)'
+    )
+    parser.add_argument(
+        '--output',
+        default='usage_report.csv',
+        help='Output file path (default: usage_report.csv)'
+    )
+    return parser
 
-# Request the usage report
-response = requests.post(
-    f"https://circleci.com/api/v2/organizations/{ORG_ID}/usage_export_job",
-    headers={"Circle-Token": CIRCLECI_TOKEN, "Content-Type": "application/json"},
-    data=json.dumps(post_data)
-)
-# Print out the API response for the usage report request
-print("Response Content:", response.json())  # This will parse the JSON response
 
-# Once requested, the report can take some time to process, so a retry is built-in
-if response.status_code == 201:
-    print("Report requested successfully")
+def handle(args):
+    """Execute the get command."""
+    # Support both args object (from CLI) and environment variables (standalone)
+    if args and hasattr(args, 'org_id'):
+        # Called from CLI with args object
+        org_id = args.org_id
+        api_token = args.api_token or os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
+        start_date = args.start_date
+        end_date = args.end_date
+        output = args.output
+    else:
+        # Called standalone - read from environment variables
+        org_id = os.getenv('ORG_ID')
+        api_token = os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
+        start_date = os.getenv('START_DATE')
+        end_date = os.getenv('END_DATE')
+        output = os.getenv('OUTPUT', 'usage_report.csv')
+
+    if not api_token:
+        print("Error: CircleCI API token required. Set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
+        return 1
+
+    if not org_id:
+        print("Error: Organization ID required. Set ORG_ID env var", file=sys.stderr)
+        return 1
+
+    if not start_date:
+        print("Error: Start date required. Set START_DATE env var", file=sys.stderr)
+        return 1
+
+    if not end_date:
+        print("Error: End date required. Set END_DATE env var", file=sys.stderr)
+        return 1
+
+    post_data = {
+        "start": f"{start_date}T00:00:01Z",
+        "end": f"{end_date}T00:00:01Z",
+        "shared_org_ids": []
+    }
+
+    print(f"Requesting usage report for org {org_id} from {start_date} to {end_date}...")
+
+    response = requests.post(
+        f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job",
+        headers={"Circle-Token": api_token, "Content-Type": "application/json"},
+        data=json.dumps(post_data)
+    )
+
+    if response.status_code != 201:
+        print(f"Error: Failed to request report. Status: {response.status_code}", file=sys.stderr)
+        print(f"Response: {response.text}", file=sys.stderr)
+        return 1
+
     data = response.json()
-    USAGE_REPORT_ID = data.get("usage_export_job_id")
-    print(f"Report ID is {USAGE_REPORT_ID}")
-  
-    # Check if the report is ready for downloading as it can take a while to process
-    for i in range(5):
-        print("Checking if report can be downloaded")
+    report_id = data.get("usage_export_job_id")
+    print(f"Report requested successfully. Report ID: {report_id}")
+
+    # Poll for report completion
+    for attempt in range(5):
+        print(f"Checking if report is ready (attempt {attempt + 1}/5)...")
+        time.sleep(10)
+
         report = requests.get(
-            f"https://circleci.com/api/v2/organizations/{ORG_ID}/usage_export_job/{USAGE_REPORT_ID}",
-            headers={"Circle-Token": CIRCLECI_TOKEN}
+            f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
+            headers={"Circle-Token": api_token}
         ).json()
 
-        report_status = report.get("state")
+        if report.get("state") == "completed":
+            print("Report generated. Downloading...")
+            download_url = report.get("download_urls")[0]
 
-        # Download the report and save it
-        if report_status == "completed":
-            print("Report generated. Now Downloading...")
-            download_urls = report.get("download_urls", [])
+            download_response = requests.get(download_url)
+            decompressed_data = gzip.decompress(download_response.content).decode('utf-8')
 
-            os.makedirs("/tmp/reports", exist_ok=True)
+            with open(output, 'w') as f:
+                f.write(decompressed_data)
 
-            for idx, url in enumerate(download_urls):
-                r = requests.get(url)
-                with open(f"/tmp/usage_report_{idx}.csv.gz", "wb") as f:
-                    f.write(r.content)             
-                with gzip.open(f"/tmp/usage_report_{idx}.csv.gz", "rb") as f_in:
-                    with open(f"/tmp/reports/usage_report_{idx}.csv", "wb") as f_out:
-                        f_out.write(f_in.read())
-
-                print(f"File {idx} downloaded and extracted")
-
-            print("All files downloaded and extracted to the /reports directory")
-            break      
-        elif report_status == "processing":
-            print("Report still processing. Retrying in 1 minute...")
-            time.sleep(60)  # Wait for 60 seconds before retrying       
+            print(f"Report saved to {output}")
+            return 0
+        elif report.get("state") == "failed":
+            print("Error: Report generation failed", file=sys.stderr)
+            return 1
         else:
-            print(f"Report status: {report_status}. Error occurred.")
-            break
-    else:
-        print("Report is still in processing state after 5 retries.")
-        sys.exit(1)
-else:
-    # Exit if something else happens, like requests are being throttled
-    print(f"{response}")
-    sys.exit(1)
+            print(f"Report status: {report.get('state')}")
+
+    print("Error: Report generation timed out", file=sys.stderr)
+    return 1
+
+
+def main():
+    """Standalone entry point."""
+    # Call handle with None to trigger environment variable reading
+    sys.exit(handle(None))
+
+
+if __name__ == '__main__':
+    main()

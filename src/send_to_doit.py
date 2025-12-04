@@ -311,16 +311,42 @@ class DoiTDataHubIngest:
             return {"status": "error", "message": f"Upload error: {str(e)}"}
 
 
-def main():
-    """Run the script."""
-    parser = argparse.ArgumentParser(description='Process a CSV file and send to DoiT DataHub.')
-    parser.add_argument('csv_file', help='Path to the CSV file')
-    parser.add_argument('--api-key', help='DoiT API key')
-    parser.add_argument('--csv-upload', action='store_true', help='Upload CSV file directly instead of processing')
-    parser.add_argument('--dry-run', action='store_true', help='Process without sending')
-    parser.add_argument('--batch-size', type=int, default=255, help='Batch size (default: 255)')
-    
-    args = parser.parse_args()
+def add_parser(subparsers):
+    """Add send-to-doit command parser."""
+    parser = subparsers.add_parser(
+        'send-to-doit',
+        help='Send usage data to DoiT DataHub'
+    )
+    parser.add_argument(
+        'csv_file',
+        help='Path to the CSV file to process'
+    )
+    parser.add_argument(
+        '--api-key',
+        help='DoiT API key (or set DOIT_API_KEY env var)'
+    )
+    parser.add_argument(
+        '--csv-upload',
+        action='store_true',
+        help='Upload CSV file directly instead of processing'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Process without sending'
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=255,
+        help='Batch size (default: 255)'
+    )
+    return parser
+
+
+def handle(args):
+    """Execute the send-to-doit command."""
+    import sys
     
     try:
         # Initialize ingestor
@@ -366,8 +392,19 @@ def main():
             return 1
         
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {str(e)}", file=sys.stderr)
         return 1
+
+
+def main():
+    """Standalone entry point."""
+    import sys
+    parser = argparse.ArgumentParser(description='Process a CSV file and send to DoiT DataHub.')
+    # Create a temporary subparsers for standalone execution
+    subparsers = parser.add_subparsers(dest='command')
+    add_parser(subparsers)
+    args = parser.parse_args()
+    sys.exit(handle(args))
 
 
 if __name__ == "__main__":
