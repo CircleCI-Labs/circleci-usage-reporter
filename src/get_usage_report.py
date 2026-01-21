@@ -12,12 +12,8 @@ import time
 import requests
 
 
-def add_parser(subparsers):
-    """Add get command parser."""
-    parser = subparsers.add_parser(
-        'get',
-        help='Request and download a CircleCI usage report'
-    )
+def _add_arguments(parser):
+    """Add arguments to a parser object."""
     parser.add_argument(
         '--org-id',
         help='CircleCI organization ID (or set ORG_ID env var)'
@@ -42,6 +38,15 @@ def add_parser(subparsers):
         help='Output file path (default: usage_report.csv)'
     )
     return parser
+
+
+def add_parser(subparsers):
+    """Add get command parser."""
+    parser = subparsers.add_parser(
+        'get',
+        help='Request and download a CircleCI usage report'
+    )
+    return _add_arguments(parser)
 
 
 def handle(args):
@@ -134,7 +139,7 @@ def main():
     """Standalone entry point."""
     import argparse
     parser = argparse.ArgumentParser(description='Get CircleCI usage report from the API.')
-    add_parser(parser)
+    _add_arguments(parser)
     args = parser.parse_args()
     sys.exit(handle(args))
 
