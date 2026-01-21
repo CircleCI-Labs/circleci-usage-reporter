@@ -20,8 +20,7 @@ def add_parser(subparsers):
     )
     parser.add_argument(
         '--org-id',
-        required=True,
-        help='CircleCI organization ID'
+        help='CircleCI organization ID (or set ORG_ID env var)'
     )
     parser.add_argument(
         '--start-date',
@@ -47,36 +46,33 @@ def add_parser(subparsers):
 
 def handle(args):
     """Execute the get command."""
-    # Support both args object (from CLI) and environment variables (standalone)
-    if args and hasattr(args, 'org_id'):
-        # Called from CLI with args object
-        org_id = args.org_id
-        api_token = args.api_token or os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
-        start_date = args.start_date
-        end_date = args.end_date
-        output = args.output
-    else:
-        # Called standalone - read from environment variables
-        org_id = os.getenv('ORG_ID')
-        api_token = os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
-        start_date = os.getenv('START_DATE')
-        end_date = os.getenv('END_DATE')
-        output = os.getenv('OUTPUT', 'usage_report.csv')
+    # Get org_id from CLI arg or environment variable
+    org_id = args.org_id or os.getenv('ORG_ID')
+    
+    # Get API token from CLI arg or environment variables
+    api_token = args.api_token or os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
+    
+    # Get dates from CLI args (required)
+    start_date = args.start_date
+    end_date = args.end_date
+    
+    # Get output from CLI arg (has default)
+    output = args.output
 
     if not api_token:
-        print("Error: CircleCI API token required. Set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
+        print("Error: CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
         return 1
 
     if not org_id:
-        print("Error: Organization ID required. Set ORG_ID env var", file=sys.stderr)
+        print("Error: Organization ID required. Use --org-id or set ORG_ID env var", file=sys.stderr)
         return 1
 
     if not start_date:
-        print("Error: Start date required. Set START_DATE env var", file=sys.stderr)
+        print("Error: Start date required. Use --start-date", file=sys.stderr)
         return 1
 
     if not end_date:
-        print("Error: End date required. Set END_DATE env var", file=sys.stderr)
+        print("Error: End date required. Use --end-date", file=sys.stderr)
         return 1
 
     post_data = {
@@ -136,8 +132,11 @@ def handle(args):
 
 def main():
     """Standalone entry point."""
-    # Call handle with None to trigger environment variable reading
-    sys.exit(handle(None))
+    import argparse
+    parser = argparse.ArgumentParser(description='Get CircleCI usage report from the API.')
+    add_parser(parser)
+    args = parser.parse_args()
+    sys.exit(handle(args))
 
 
 if __name__ == '__main__':
