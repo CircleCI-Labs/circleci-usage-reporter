@@ -103,36 +103,61 @@ def handle(args):
     report_id = data.get("usage_export_job_id")
     print(f"Report requested successfully. Report ID: {report_id}")
 
-    # Poll for report completion
-    for attempt in range(5):
-        print(f"Checking if report is ready (attempt {attempt + 1}/5)...")
-        time.sleep(10)
+    # Determine output directory
+    # If output ends with / or is an existing directory, use it as directory
+    # Otherwise, extract directory from the path
+    if output.endswith('/') or os.path.isdir(output):
+        output_dir = output.rstrip('/')
+    else:
+        output_dir = os.path.dirname(output) if os.path.dirname(output) else '.'
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
 
+    # Check if the report is ready for downloading as it can take a while to process
+    for i in range(5):
+        print("Checking if report can be downloaded")
         report = requests.get(
             f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
             headers={"Circle-Token": api_token}
         ).json()
 
-        if report.get("state") == "completed":
-            print("Report generated. Downloading...")
-            download_url = report.get("download_urls")[0]
+        report_status = report.get("state")
 
-            download_response = requests.get(download_url)
-            decompressed_data = gzip.decompress(download_response.content).decode('utf-8')
+        # Download the report and save it
+        if report_status == "completed":
+            print("Report generated. Now Downloading...")
+            download_urls = report.get("download_urls", [])
 
-            with open(output, 'w') as f:
-                f.write(decompressed_data)
+            for idx, url in enumerate(download_urls):
+                r = requests.get(url)
+                # Save compressed file temporarily
+                temp_gz_path = os.path.join(output_dir, f"usage_report_{idx}.csv.gz")
+                with open(temp_gz_path, "wb") as f:
+                    f.write(r.content)
+                
+                # Extract and save as CSV
+                csv_path = os.path.join(output_dir, f"usage_report_{idx}.csv")
+                with gzip.open(temp_gz_path, "rb") as f_in:
+                    with open(csv_path, "wb") as f_out:
+                        f_out.write(f_in.read())
+                
+                # Remove temporary gzip file
+                os.remove(temp_gz_path)
 
-            print(f"Report saved to {output}")
+                print(f"File {idx} downloaded and extracted")
+
+            print(f"All files downloaded and extracted to the {output_dir} directory")
             return 0
-        elif report.get("state") == "failed":
-            print("Error: Report generation failed", file=sys.stderr)
-            return 1
+        elif report_status == "processing":
+            print("Report still processing. Retrying in 1 minute...")
+            time.sleep(60)  # Wait for 60 seconds before retrying
         else:
-            print(f"Report status: {report.get('state')}")
-
-    print("Error: Report generation timed out", file=sys.stderr)
-    return 1
+            print(f"Report status: {report_status}. Error occurred.", file=sys.stderr)
+            return 1
+    else:
+        print("Report is still in processing state after 5 retries.", file=sys.stderr)
+        return 1
 
 
 def main():
