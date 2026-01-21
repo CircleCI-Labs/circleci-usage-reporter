@@ -115,8 +115,14 @@ def handle(args):
     os.makedirs(output_dir, exist_ok=True)
 
     # Check if the report is ready for downloading as it can take a while to process
-    for i in range(5):
-        print("Checking if report can be downloaded")
+    # Use exponential backoff with a maximum wait time cap
+    base_delay = 10  # Start with 10 seconds
+    max_wait_time = 60  # Cap at 1 minute (60 seconds)
+    attempt = 0
+    
+    while True:
+        attempt += 1
+        print(f"Checking if report can be downloaded (attempt {attempt})...")
         report = requests.get(
             f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
             headers={"Circle-Token": api_token}
@@ -150,14 +156,13 @@ def handle(args):
             print(f"All files downloaded and extracted to the {output_dir} directory")
             return 0
         elif report_status == "processing":
-            print("Report still processing. Retrying in 1 minute...")
-            time.sleep(60)  # Wait for 60 seconds before retrying
+            # Exponential backoff: wait time doubles with each attempt, capped at max_wait_time
+            wait_time = min(base_delay * (2 ** (attempt - 1)), max_wait_time)
+            print(f"Report still processing. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
         else:
             print(f"Report status: {report_status}. Error occurred.", file=sys.stderr)
             return 1
-    else:
-        print("Report is still in processing state after 5 retries.", file=sys.stderr)
-        return 1
 
 
 def main():
