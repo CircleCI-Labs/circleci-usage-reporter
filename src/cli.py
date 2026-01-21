@@ -40,7 +40,7 @@ Examples:
     subparsers.required = True
 
     # Import and register parsers from their respective modules
-    from src.get_usage_report import add_parser as add_get_usage_report_parser
+    from src.get import add_parser as add_get_parser
     from src.merge import add_parser as add_merge_parser
     from src.send_to_datadog import add_parser as add_datadog_parser
     from src.send_to_doit import add_parser as add_doit_parser
@@ -48,7 +48,7 @@ Examples:
     from src.run_analysis import add_parser as add_run_analysis_parser
 
     # Register all command parsers
-    add_get_usage_report_parser(subparsers)
+    add_get_parser(subparsers)
     add_merge_parser(subparsers)
     add_datadog_parser(subparsers)
     add_doit_parser(subparsers)
@@ -64,7 +64,7 @@ def main():
     args = parser.parse_args()
 
     # Import and dispatch to appropriate command handler
-    from src.get_usage_report import handle as handle_get_usage_report
+    from src.get import handle as handle_get
     from src.merge import handle as handle_merge
     from src.send_to_datadog import handle as handle_datadog
     from src.send_to_doit import handle as handle_doit
@@ -72,7 +72,7 @@ def main():
     from src.run_analysis import handle as handle_run_analysis
 
     command_handlers = {
-        'get': handle_get_usage_report,
+        'get': handle_get,
         'send-to-datadog': handle_datadog,
         'send-to-doit': handle_doit,
         'create-graph': handle_create_graph,
