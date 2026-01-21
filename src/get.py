@@ -11,9 +11,15 @@ import shutil
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 import requests
+
+from src.merge import handle as merge_handle
+
+BASE_API_URL = "https://circleci.com/api/v2"
+BASE_DELAY = 10  # Start with 10 seconds for exponential backoff
+MAX_WAIT_TIME = 60  # Cap at 1 minute (60 seconds)
+TEMP_DIR_BASE = "/tmp/circleci-usage-reporter"
 
 
 def _add_arguments(parser):
@@ -53,6 +59,120 @@ def add_parser(subparsers):
     return _add_arguments(parser)
 
 
+def _validate_args(org_id, api_token, start_date, end_date):
+    """Validate required arguments."""
+    if not api_token:
+        print("Error: CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
+        return False
+
+    if not org_id:
+        print("Error: Organization ID required. Use --org-id or set ORG_ID env var", file=sys.stderr)
+        return False
+
+    if not start_date:
+        print("Error: Start date required. Use --start-date", file=sys.stderr)
+        return False
+
+    if not end_date:
+        print("Error: End date required. Use --end-date", file=sys.stderr)
+        return False
+
+    return True
+
+
+def _request_report(org_id, api_token, start_date, end_date):
+    """Request a usage report from the API."""
+    post_data = {
+        "start": f"{start_date}T00:00:01Z",
+        "end": f"{end_date}T00:00:01Z",
+        "shared_org_ids": []
+    }
+
+    print(f"Requesting usage report for org {org_id} from {start_date} to {end_date}...")
+
+    response = requests.post(
+        f"{BASE_API_URL}/organizations/{org_id}/usage_export_job",
+        headers={"Circle-Token": api_token, "Content-Type": "application/json"},
+        data=json.dumps(post_data)
+    )
+
+    if response.status_code != 201:
+        print(f"Error: Failed to request report. Status: {response.status_code}", file=sys.stderr)
+        print(f"Response: {response.text}", file=sys.stderr)
+        return None
+
+    data = response.json()
+    report_id = data.get("usage_export_job_id")
+    print(f"Report requested successfully. Report ID: {report_id}")
+    return report_id
+
+
+def _determine_output_path(output):
+    """Determine the final output path and directory."""
+    if output.endswith('/') or os.path.isdir(output):
+        output_dir = output.rstrip('/')
+        final_output = os.path.join(output_dir, 'usage_report.csv')
+    else:
+        output_dir = os.path.dirname(output) if os.path.dirname(output) else '.'
+        final_output = output
+    
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir, final_output
+
+
+def _create_temp_directory():
+    """Create a temporary directory for intermediate CSV files."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    temp_dir = os.path.join(TEMP_DIR_BASE, timestamp)
+    os.makedirs(temp_dir, exist_ok=True)
+    return temp_dir
+
+
+def _download_csv_files(download_urls, temp_dir):
+    """Download and extract CSV files from URLs."""
+    for idx, url in enumerate(download_urls):
+        r = requests.get(url)
+        # Save compressed file temporarily
+        temp_gz_path = os.path.join(temp_dir, f"usage_report_{idx}.csv.gz")
+        with open(temp_gz_path, "wb") as f:
+            f.write(r.content)
+        
+        # Extract and save as CSV
+        csv_path = os.path.join(temp_dir, f"usage_report_{idx}.csv")
+        with gzip.open(temp_gz_path, "rb") as f_in:
+            with open(csv_path, "wb") as f_out:
+                f_out.write(f_in.read())
+        
+        # Remove temporary gzip file
+        os.remove(temp_gz_path)
+
+        print(f"File {idx} downloaded and extracted")
+
+
+def _merge_csv_files(temp_dir, final_output):
+    """Merge CSV files using the existing merge functionality."""
+    merge_args = argparse.Namespace(
+        input_dir=temp_dir,
+        output=final_output
+    )
+    
+    return merge_handle(merge_args)
+
+
+def _get_report_status(org_id, api_token, report_id):
+    """Get the current status of a usage report."""
+    response = requests.get(
+        f"{BASE_API_URL}/organizations/{org_id}/usage_export_job/{report_id}",
+        headers={"Circle-Token": api_token}
+    )
+    return response.json()
+
+
+def _calculate_wait_time(attempt, base_delay=BASE_DELAY, max_wait_time=MAX_WAIT_TIME):
+    """Calculate wait time using exponential backoff."""
+    return min(base_delay * (2 ** (attempt - 1)), max_wait_time)
+
+
 def handle(args):
     """Execute the get command."""
     # Get org_id from CLI arg or environment variable
@@ -68,121 +188,47 @@ def handle(args):
     # Get output from CLI arg (has default)
     output = args.output
 
-    if not api_token:
-        print("Error: CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
+    # Validate arguments
+    if not _validate_args(org_id, api_token, start_date, end_date):
         return 1
 
-    if not org_id:
-        print("Error: Organization ID required. Use --org-id or set ORG_ID env var", file=sys.stderr)
+    # Request the report
+    report_id = _request_report(org_id, api_token, start_date, end_date)
+    if not report_id:
         return 1
 
-    if not start_date:
-        print("Error: Start date required. Use --start-date", file=sys.stderr)
-        return 1
-
-    if not end_date:
-        print("Error: End date required. Use --end-date", file=sys.stderr)
-        return 1
-
-    post_data = {
-        "start": f"{start_date}T00:00:01Z",
-        "end": f"{end_date}T00:00:01Z",
-        "shared_org_ids": []
-    }
-
-    print(f"Requesting usage report for org {org_id} from {start_date} to {end_date}...")
-
-    response = requests.post(
-        f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job",
-        headers={"Circle-Token": api_token, "Content-Type": "application/json"},
-        data=json.dumps(post_data)
-    )
-
-    if response.status_code != 201:
-        print(f"Error: Failed to request report. Status: {response.status_code}", file=sys.stderr)
-        print(f"Response: {response.text}", file=sys.stderr)
-        return 1
-
-    data = response.json()
-    report_id = data.get("usage_export_job_id")
-    print(f"Report requested successfully. Report ID: {report_id}")
-
-    # Determine final output path
-    # If output ends with / or is an existing directory, use it as directory with default filename
-    if output.endswith('/') or os.path.isdir(output):
-        output_dir = output.rstrip('/')
-        final_output = os.path.join(output_dir, 'usage_report.csv')
-    else:
-        output_dir = os.path.dirname(output) if os.path.dirname(output) else '.'
-        final_output = output
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    # Determine output paths
+    output_dir, final_output = _determine_output_path(output)
     
     # Create temporary directory for intermediate CSV files
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    temp_dir = os.path.join('/tmp', 'circleci-usage-reporter', timestamp)
-    os.makedirs(temp_dir, exist_ok=True)
+    temp_dir = _create_temp_directory()
     
     try:
-        # Check if the report is ready for downloading as it can take a while to process
-        # Use exponential backoff with a maximum wait time cap
-        base_delay = 10  # Start with 10 seconds
-        max_wait_time = 60  # Cap at 1 minute (60 seconds)
+        # Poll for report completion with exponential backoff
         attempt = 0
         
         while True:
             attempt += 1
             print(f"Checking if report can be downloaded (attempt {attempt})...")
-            report = requests.get(
-                f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
-                headers={"Circle-Token": api_token}
-            ).json()
-
+            
+            report = _get_report_status(org_id, api_token, report_id)
             report_status = report.get("state")
 
-            # Download the report and save it
             if report_status == "completed":
                 print("Report generated. Now Downloading...")
                 download_urls = report.get("download_urls", [])
 
                 # Download all CSV files to temporary directory
-                for idx, url in enumerate(download_urls):
-                    r = requests.get(url)
-                    # Save compressed file temporarily
-                    temp_gz_path = os.path.join(temp_dir, f"usage_report_{idx}.csv.gz")
-                    with open(temp_gz_path, "wb") as f:
-                        f.write(r.content)
-                    
-                    # Extract and save as CSV
-                    csv_path = os.path.join(temp_dir, f"usage_report_{idx}.csv")
-                    with gzip.open(temp_gz_path, "rb") as f_in:
-                        with open(csv_path, "wb") as f_out:
-                            f_out.write(f_in.read())
-                    
-                    # Remove temporary gzip file
-                    os.remove(temp_gz_path)
+                _download_csv_files(download_urls, temp_dir)
 
-                    print(f"File {idx} downloaded and extracted")
-
-                # Merge all CSV files into one using the existing merge functionality
-                from src.merge import handle as merge_handle
-                import argparse
-                
-                # Create a simple args object for the merge function
-                merge_args = argparse.Namespace(
-                    input_dir=temp_dir,
-                    output=final_output
-                )
-                
-                merge_result = merge_handle(merge_args)
+                # Merge all CSV files into one
+                merge_result = _merge_csv_files(temp_dir, final_output)
                 if merge_result != 0:
                     return merge_result
                 
                 return 0
             elif report_status == "processing":
-                # Exponential backoff: wait time doubles with each attempt, capped at max_wait_time
-                wait_time = min(base_delay * (2 ** (attempt - 1)), max_wait_time)
+                wait_time = _calculate_wait_time(attempt)
                 print(f"Report still processing. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
