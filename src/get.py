@@ -3,11 +3,15 @@
 Get CircleCI usage report from the API.
 """
 
+import argparse
 import gzip
 import json
 import os
+import shutil
 import sys
 import time
+from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -103,66 +107,92 @@ def handle(args):
     report_id = data.get("usage_export_job_id")
     print(f"Report requested successfully. Report ID: {report_id}")
 
-    # Determine output directory
-    # If output ends with / or is an existing directory, use it as directory
-    # Otherwise, extract directory from the path
+    # Determine final output path
+    # If output ends with / or is an existing directory, use it as directory with default filename
     if output.endswith('/') or os.path.isdir(output):
         output_dir = output.rstrip('/')
+        final_output = os.path.join(output_dir, 'usage_report.csv')
     else:
         output_dir = os.path.dirname(output) if os.path.dirname(output) else '.'
+        final_output = output
     
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-
-    # Check if the report is ready for downloading as it can take a while to process
-    # Use exponential backoff with a maximum wait time cap
-    base_delay = 10  # Start with 10 seconds
-    max_wait_time = 60  # Cap at 1 minute (60 seconds)
-    attempt = 0
     
-    while True:
-        attempt += 1
-        print(f"Checking if report can be downloaded (attempt {attempt})...")
-        report = requests.get(
-            f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
-            headers={"Circle-Token": api_token}
-        ).json()
+    # Create temporary directory for intermediate CSV files
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    temp_dir = os.path.join('/tmp', 'circleci-usage-reporter', timestamp)
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    try:
+        # Check if the report is ready for downloading as it can take a while to process
+        # Use exponential backoff with a maximum wait time cap
+        base_delay = 10  # Start with 10 seconds
+        max_wait_time = 60  # Cap at 1 minute (60 seconds)
+        attempt = 0
+        
+        while True:
+            attempt += 1
+            print(f"Checking if report can be downloaded (attempt {attempt})...")
+            report = requests.get(
+                f"https://circleci.com/api/v2/organizations/{org_id}/usage_export_job/{report_id}",
+                headers={"Circle-Token": api_token}
+            ).json()
 
-        report_status = report.get("state")
+            report_status = report.get("state")
 
-        # Download the report and save it
-        if report_status == "completed":
-            print("Report generated. Now Downloading...")
-            download_urls = report.get("download_urls", [])
+            # Download the report and save it
+            if report_status == "completed":
+                print("Report generated. Now Downloading...")
+                download_urls = report.get("download_urls", [])
 
-            for idx, url in enumerate(download_urls):
-                r = requests.get(url)
-                # Save compressed file temporarily
-                temp_gz_path = os.path.join(output_dir, f"usage_report_{idx}.csv.gz")
-                with open(temp_gz_path, "wb") as f:
-                    f.write(r.content)
+                # Download all CSV files to temporary directory
+                for idx, url in enumerate(download_urls):
+                    r = requests.get(url)
+                    # Save compressed file temporarily
+                    temp_gz_path = os.path.join(temp_dir, f"usage_report_{idx}.csv.gz")
+                    with open(temp_gz_path, "wb") as f:
+                        f.write(r.content)
+                    
+                    # Extract and save as CSV
+                    csv_path = os.path.join(temp_dir, f"usage_report_{idx}.csv")
+                    with gzip.open(temp_gz_path, "rb") as f_in:
+                        with open(csv_path, "wb") as f_out:
+                            f_out.write(f_in.read())
+                    
+                    # Remove temporary gzip file
+                    os.remove(temp_gz_path)
+
+                    print(f"File {idx} downloaded and extracted")
+
+                # Merge all CSV files into one using the existing merge functionality
+                from src.merge import handle as merge_handle
+                import argparse
                 
-                # Extract and save as CSV
-                csv_path = os.path.join(output_dir, f"usage_report_{idx}.csv")
-                with gzip.open(temp_gz_path, "rb") as f_in:
-                    with open(csv_path, "wb") as f_out:
-                        f_out.write(f_in.read())
+                # Create a simple args object for the merge function
+                merge_args = argparse.Namespace(
+                    input_dir=temp_dir,
+                    output=final_output
+                )
                 
-                # Remove temporary gzip file
-                os.remove(temp_gz_path)
-
-                print(f"File {idx} downloaded and extracted")
-
-            print(f"All files downloaded and extracted to the {output_dir} directory")
-            return 0
-        elif report_status == "processing":
-            # Exponential backoff: wait time doubles with each attempt, capped at max_wait_time
-            wait_time = min(base_delay * (2 ** (attempt - 1)), max_wait_time)
-            print(f"Report still processing. Retrying in {wait_time} seconds...")
-            time.sleep(wait_time)
-        else:
-            print(f"Report status: {report_status}. Error occurred.", file=sys.stderr)
-            return 1
+                merge_result = merge_handle(merge_args)
+                if merge_result != 0:
+                    return merge_result
+                
+                return 0
+            elif report_status == "processing":
+                # Exponential backoff: wait time doubles with each attempt, capped at max_wait_time
+                wait_time = min(base_delay * (2 ** (attempt - 1)), max_wait_time)
+                print(f"Report still processing. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print(f"Report status: {report_status}. Error occurred.", file=sys.stderr)
+                return 1
+    finally:
+        # Clean up temporary directory
+        if os.path.exists(temp_dir):
+            print(f"Cleaning up temporary directory: {temp_dir}")
+            shutil.rmtree(temp_dir)
 
 
 def main():
