@@ -1,0 +1,46 @@
+version: 2.1
+
+commands:
+  install-usage-reporter:
+    steps:
+      - run:
+          name: Checkout usage-api-reporter
+          command: git clone https://github.com/CircleCI-Labs/circleci-usage-reporter.git /tmp/usage-api-reporter
+      - run:
+          name: Install dependencies
+          command: pip install -r requirements.txt
+          working_directory: /tmp/usage-api-reporter
+      - run:
+          name: Install usage-api-reporter
+          command: pip install -e .
+          working_directory: /tmp/usage-api-reporter
+      - run:
+          name: Verify installation
+          command: usage-api-reporter --help
+
+# Intended to be used as a scheduled pipeline, e.g every hour
+jobs:
+  send-to-postgres:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - install-usage-reporter
+      - run:
+          name: Import usage data
+          command: |
+            # Calculate date range: yesterday (n-1) to today (n)
+            START_DATE=$(date -d "yesterday" +%Y-%m-%d)
+            END_DATE=$(date +%Y-%m-%d)
+            
+            circleci-usage-reporter send-to-postgres \
+              --start-date $START_DATE \
+              --end-date $END_DATE \
+              --org-id $ORG_ID \
+              --database circleci_usage \
+              --user postgres \
+              --summary
+
+workflows:
+  send-to-postgres:
+    jobs:
+      - send-to-postgres
