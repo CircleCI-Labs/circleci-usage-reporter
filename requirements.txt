@@ -1,7 +1,10 @@
 datadog_api_client==2.40.0
 matplotlib==3.10.3
 pandas==2.3.1
+psycopg2-binary>=2.9.0
 Requests==2.32.4
+sqlalchemy>=2.0.0
+alembic>=1.13.0
 
 # Development dependencies
 flake8==7.1.1

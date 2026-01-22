@@ -33,6 +33,12 @@ Examples:
 
   # Create visualization graph
   circleci-usage-reporter create-graph /tmp/reports/merged.csv
+
+  # Send data to PostgreSQL (from CSV file)
+  circleci-usage-reporter send-to-postgres --input merged.csv --database circleci_usage --user postgres --create-schema --summary
+
+  # Send data to PostgreSQL (fetch from API and load)
+  circleci-usage-reporter send-to-postgres --start-date 2024-01-01 --end-date 2024-01-31 --org-id <id> --api-token <token> --database circleci_usage --user postgres --create-schema --summary
         """
     )
 
@@ -46,6 +52,7 @@ Examples:
     from src.send_to_doit import add_parser as add_doit_parser
     from src.create_graph import add_parser as add_create_graph_parser
     from src.run_analysis import add_parser as add_run_analysis_parser
+    from src.send_to_postgres import add_parser as add_postgres_parser
 
     # Register all command parsers
     add_get_parser(subparsers)
@@ -54,6 +61,7 @@ Examples:
     add_doit_parser(subparsers)
     add_create_graph_parser(subparsers)
     add_run_analysis_parser(subparsers)
+    add_postgres_parser(subparsers)
 
     return parser
 
@@ -70,6 +78,7 @@ def main():
     from src.send_to_doit import handle as handle_doit
     from src.create_graph import handle as handle_create_graph
     from src.run_analysis import handle as handle_run_analysis
+    from src.send_to_postgres import handle as handle_postgres
 
     command_handlers = {
         'get': handle_get,
@@ -78,6 +87,7 @@ def main():
         'create-graph': handle_create_graph,
         'merge': handle_merge,
         'run-analysis': handle_run_analysis,
+        'send-to-postgres': handle_postgres,
     }
 
     handler = command_handlers.get(args.command)
