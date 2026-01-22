@@ -35,9 +35,48 @@ jobs:
       - run:
           name: Simple test image is functional
           command: docker run --rm usage-reporter --help
+  
+  e2e-send-to-postgres:
+    docker:
+      - image: cimg/python:3.13.5
+      - image: cimg/postgres:18.1
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: circleci_usage
+    steps:
+      - checkout
+      # TODO: use workspace from lint-and-test instead of reinstalling dependencies
+      - run:
+          name: Install dependencies
+          command: |
+            make install
+            make install-cli
+      - run:
+          name: Send to PostgreSQL
+          command: |
+            circleci-usage-reporter send-to-postgres \
+              --input .circleci/test-data.csv \
+              --database circleci_usage \
+              --user postgres \
+              --password postgres \
+              --summary
+      - run:
+          name: Assert expected row count imported
+          command: |
+            IMPORTED_ROWS=$(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d circleci_usage -At -c "SELECT COUNT(*) FROM circleci_usage;")
+            if [ "$IMPORTED_ROWS" -ne 2000 ]; then
+              echo "❌ Expected 2000 rows, but found $IMPORTED_ROWS in circleci_usage table!"
+              exit 1
+            else
+              echo "✅ Found expected $IMPORTED_ROWS rows in circleci_usage table."
+            fi
 
 workflows:
   testing:
     jobs:
       - lint-and-test
       - build-docker-image
+      - e2e-send-to-postgres:
+          requires:
+            - lint-and-test
