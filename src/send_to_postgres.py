@@ -12,8 +12,7 @@ import logging
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Optional, Dict, Any
 import argparse
 import gzip
 import json
@@ -672,8 +671,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     # Use defaults for standalone usage
-    _add_arguments(parser, database_required=False, database_default='circleci_usage', 
-                  user_required=False, user_default='postgres')
+    _add_arguments(
+        parser,
+        database_required=False,
+        database_default='circleci_usage',
+        user_required=False,
+        user_default='postgres'
+    )
     args = parser.parse_args()
     sys.exit(handle(args))
 
