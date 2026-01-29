@@ -272,6 +272,19 @@ class CircleCIPostgresLoader:
             logger.warning("No matching columns found in dataframe")
             return True
         
+        # Filter out rows where job_id is NULL - job_id is required for UPSERT
+        if 'job_id' in df.columns:
+            original_count = len(df)
+            df = df[df['job_id'].notna()]
+            filtered_count = len(df)
+            if filtered_count < original_count:
+                skipped = original_count - filtered_count
+                logger.warning(f"Skipped {skipped} rows with NULL job_id (job_id is required)")
+        
+        if df.empty:
+            logger.info("No valid rows to insert after filtering NULL job_ids")
+            return True
+        
         # Prepare data for insertion
         columns = list(available_columns.values())
         values = []
@@ -284,11 +297,29 @@ class CircleCIPostgresLoader:
             )
             values.append(value_tuple)
         
-        # Create the INSERT statement template for execute_values
-        insert_sql = f"""
-            INSERT INTO circleci_usage ({', '.join(columns)})
-            VALUES %s
-        """
+        # Check if job_id is present for UPSERT support
+        has_job_id = 'job_id' in columns
+        
+        # Create the INSERT/UPSERT statement template for execute_values
+        if has_job_id:
+            # Use UPSERT: update existing records based on job_id
+            update_columns = [col for col in columns if col != 'id' and col != 'created_at']
+            update_set = ', '.join([f"{col} = EXCLUDED.{col}" for col in update_columns])
+            update_set += ", updated_at = CURRENT_TIMESTAMP"
+            
+            insert_sql = f"""
+                INSERT INTO circleci_usage ({', '.join(columns)})
+                VALUES %s
+                ON CONFLICT (job_id)
+                DO UPDATE SET {update_set}
+            """
+        else:
+            # Fall back to regular INSERT if job_id is not present
+            logger.warning("job_id column not found in data - using regular INSERT (no UPSERT)")
+            insert_sql = f"""
+                INSERT INTO circleci_usage ({', '.join(columns)})
+                VALUES %s
+            """
         
         try:
             with self.connection.cursor() as cursor:
@@ -490,7 +521,7 @@ def _add_arguments(parser, database_required=True, database_default=None, user_r
     )
     parser.add_argument(
         '--api-token',
-        help='CircleCI API token (or set CIRCLECI_API_TOKEN env var). Required when using --start-date'
+        help='CircleCI API token (or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var). Required when using --start-date'
     )
     
     # PostgreSQL connection arguments
@@ -571,7 +602,7 @@ def handle(args):
             return 1
         
         if not api_token:
-            logger.error("CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN env var")
+            logger.error("CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var")
             return 1
         
         # Fetch data from API

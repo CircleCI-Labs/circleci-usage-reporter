@@ -87,6 +87,14 @@ def upgrade() -> None:
     op.create_index('idx_circleci_usage_job_run_started_at', 'circleci_usage', ['job_run_started_at'])
     op.create_index('idx_circleci_usage_total_credits', 'circleci_usage', ['total_credits'])
     
+    # Create unique index on job_id for UPSERT support
+    # Note: Application code filters out NULL job_ids before insertion
+    op.execute("""
+        CREATE UNIQUE INDEX idx_circleci_usage_job_id_unique 
+        ON circleci_usage(job_id) 
+        WHERE job_id IS NOT NULL
+    """)
+    
     # Create a view for job performance analysis
     op.execute("""
         CREATE OR REPLACE VIEW job_performance AS
@@ -141,6 +149,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP VIEW IF EXISTS cost_analysis")
     op.execute("DROP VIEW IF EXISTS job_performance")
+    op.drop_index('idx_circleci_usage_job_id_unique', table_name='circleci_usage')
     op.drop_index('idx_circleci_usage_total_credits', table_name='circleci_usage')
     op.drop_index('idx_circleci_usage_job_run_started_at', table_name='circleci_usage')
     op.drop_index('idx_circleci_usage_pipeline_created_at', table_name='circleci_usage')
