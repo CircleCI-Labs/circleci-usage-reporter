@@ -89,11 +89,12 @@ def upgrade() -> None:
     
     # Create unique index on job_id for UPSERT support
     # Note: Application code filters out NULL job_ids before insertion
-    op.execute("""
-        CREATE UNIQUE INDEX idx_circleci_usage_job_id_unique 
-        ON circleci_usage(job_id) 
-        WHERE job_id IS NOT NULL
-    """)
+    op.create_index(
+        'idx_circleci_usage_job_id_unique',
+        'circleci_usage',
+        ['job_id'],
+        unique=True
+    )
     
     # Create a view for job performance analysis
     op.execute("""
