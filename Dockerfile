@@ -19,8 +19,8 @@ RUN apk add --no-cache \
     build-base \
     && rm -rf /var/cache/apk/*
 
-# Copy requirements first for better Docker layer caching
-COPY requirements.txt ./
+# Copy requirements and project files first for better Docker layer caching
+COPY requirements.txt pyproject.toml ./
 
 # Install Python dependencies
 # Use pip with no-cache-dir to reduce image size
@@ -29,6 +29,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy the application source code
 COPY src/ ./src/
+
+# Install the package itself
+RUN pip install --no-cache-dir -e .
 
 # Create directories for reports and artifacts
 RUN mkdir -p /tmp/reports
@@ -45,9 +48,5 @@ RUN addgroup -g 1001 appgroup && \
 # Switch to non-root user
 USER appuser
 
-# Set the default entrypoint to python
-ENTRYPOINT ["python"]
-
-# Health check (optional)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+# Set the default entrypoint to circleci-usage-reporter CLI
+ENTRYPOINT ["circleci-usage-reporter"]

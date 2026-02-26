@@ -72,11 +72,60 @@ use-usage-api:
 
 Once contexts and environment variables are configured, push a commit to your fork or manually trigger the pipeline in CircleCI.
 
+## Manual CLI Usage
+
+You can also use the CLI commands directly without CircleCI:
+
+### 1. Download Usage Report
+
+```bash
+circleci-usage-reporter get \
+  --org-id <your-org-id> \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31 \
+  --output usage_report.csv
+```
+
+### 2. Merge Multiple Reports (if needed)
+
+```bash
+circleci-usage-reporter merge \
+  --input-dir /tmp/reports \
+  --output merged.csv
+```
+
+### 3. Send to DoiT
+
+```bash
+circleci-usage-reporter send-to-doit merged.csv \
+  --api-key <your-doit-api-key>
+```
+
+### Using Environment Variables
+
+You can use environment variables for API keys:
+
+```bash
+export DOIT_API_KEY="your-api-key"
+export CIRCLECI_API_TOKEN="your-circleci-token"
+export ORG_ID="your-org-id"
+
+circleci-usage-reporter get --start-date 2024-01-01 --end-date 2024-01-31
+circleci-usage-reporter send-to-doit usage_report.csv
+```
+
+### Additional Options
+
+- `--csv-upload`: Upload CSV file directly instead of processing as events
+- `--dry-run`: Process without sending (for testing)
+- `--batch-size`: Batch size for events (default: `255`)
+
 ## Notes
 
-- For updates, refer to the [main README.md](README.md) for changing project structure or installing dependencies.
+- For updates, refer to the [main README.md](../../README.md) for changing project structure or installing dependencies.
 - If updating the name of the CircleCI context, ensure it matches the value in your workflow under the `context:` key.
+- **Note:** The CircleCI workflow configuration (`.circleci/config.yml`) may need to be updated to use the new CLI commands instead of direct Python script execution.
 
 ---
 
-**This setup lets you automate exporting CircleCI usage data and uploading it to DoiT’s API using CircleCI workflows.**
+**This setup lets you automate exporting CircleCI usage data and uploading it to DoiT's API using CircleCI workflows.**

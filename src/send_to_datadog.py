@@ -256,20 +256,53 @@ class DatadogCSVIngest:
         return results
 
 
-def main():
-    """Run the script."""
-    parser = argparse.ArgumentParser(description='Process a CSV file and send to Datadog.')
-    parser.add_argument('csv_file', help='Path to the CSV file')
-    parser.add_argument('--api-key', help='Datadog API key')
-    parser.add_argument('--application-key', help='Datadog Application key')
-    parser.add_argument('--events', action='store_true', help='Send events to Datadog')
-    parser.add_argument('--dry-run', action='store_true', help='Process without sending')
-    parser.add_argument('--batch-size', type=int, default=100, help='Batch size (default: 100)')
-    parser.add_argument('--site', default='datadoghq.com',
-                        choices=['datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com'],
-                        help='Datadog site (default: datadoghq.com)')
-    
-    args = parser.parse_args()
+def add_parser(subparsers):
+    """Add send-to-datadog command parser."""
+    parser = subparsers.add_parser(
+        'send-to-datadog',
+        help='Send usage data to Datadog'
+    )
+    parser.add_argument(
+        'csv_file',
+        help='Path to the CSV file to process'
+    )
+    parser.add_argument(
+        '--api-key',
+        help='Datadog API key (or set DD_API_KEY env var)'
+    )
+    parser.add_argument(
+        '--app-key',
+        dest='application_key',
+        help='Datadog application key (or set DD_APP_KEY env var)'
+    )
+    parser.add_argument(
+        '--site',
+        default='datadoghq.com',
+        choices=['datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com', 'us5.datadoghq.com'],
+        help='Datadog site (default: datadoghq.com)'
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=1000,
+        help='Number of metrics per batch (default: 1000)'
+    )
+    parser.add_argument(
+        '--events',
+        action='store_true',
+        help='Send events to Datadog'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Process without sending'
+    )
+    return parser
+
+
+def handle(args):
+    """Execute the send-to-datadog command."""
+    import sys
     
     try:
         # Initialize ingestor
@@ -342,12 +375,20 @@ def main():
                 time.sleep(1)
         
         print("Processing complete")
+        return 0
         
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {str(e)}", file=sys.stderr)
         return 1
-        
-    return 0
+
+
+def main():
+    """Standalone entry point."""
+    import sys
+    parser = argparse.ArgumentParser(description='Process a CSV file and send to Datadog.')
+    add_parser(parser)
+    args = parser.parse_args()
+    sys.exit(handle(args))
 
 
 if __name__ == "__main__":

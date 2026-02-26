@@ -37,21 +37,50 @@ CircleCI's Usage API provides powerful data about your CI/CD pipelines. This too
 
 ## Quick Start
 
+### Install with pip
+
+#### 1. Install pyenv (if not already installed)
+
+Install pyenv following the [official installation instructions](https://github.com/pyenv/pyenv#installation). Alternatively, you can use any other Python version manager (e.g., conda, asdf).
+
+#### 2. Install Python 3.8+ using pyenv
+
+```bash
+pyenv install 3.11.14  # or any 3.8+ version
+```
+
+#### 3. Clone and install the package
+
 ```bash
 git clone git@github.com:CircleCI-Labs/circleci-usage-reporter.git
 cd circleci-usage-reporter
-
-# These env vars are read by get_usage_report.py
-export ORG_ID=""
-export CIRCLECI_API_TOKEN=""
-export START_DATE="2025-07-01"
-export END_DATE="2025-06-01"
-
-# Export your usage data
-python scripts/get_usage_report.py
+pyenv local 3.11.14     # Set Python version for this project
+pip install -e .
 ```
 
-This will download a raw CSV dataset locally ready for analysis.
+After installation, the `circleci-usage-reporter` command will be available system-wide:
+
+```bash
+# View all available commands
+circleci-usage-reporter --help
+
+# Get usage report
+circleci-usage-reporter get \
+  --org-id <your-org-id> \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31
+```
+
+**Note:** Use `pip install -e .` for an editable install (changes to source code are immediately available) or `pip install .` for a regular install. If you encounter issues with editable installs, ensure you have pip 21.3+ (upgrade with `pip install --upgrade pip`).
+
+### With Docker
+
+```bash
+git clone git@github.com:CircleCI-Labs/circleci-usage-reporter.git
+cd circleci-usage-reporter
+docker build . -t circleci-usage-reporter:latest
+docker run --rm circleci-usage-reporter --help
+```
 
 ## What's Included
 

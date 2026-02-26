@@ -1,18 +1,33 @@
-.PHONY: help install lint test clean all
+.PHONY: help install install-cli install-dev lint test clean all build
 
 # Default target
 help:
 	@echo "Available commands:"
-	@echo "  install     Install all dependencies"
-	@echo "  lint        Run all linting checks"
-	@echo "  test        Run tests with coverage"
-	@echo "  clean       Clean up generated files"
-	@echo "  all         Run lint and test"
+	@echo "  install        Install all dependencies"
+	@echo "  install-cli    Install CLI system-wide (editable mode)"
+	@echo "  install-dev    Install CLI in editable mode for development"
+	@echo "  build          Build distribution packages"
+	@echo "  lint           Run all linting checks"
+	@echo "  test           Run tests with coverage"
+	@echo "  clean          Clean up generated files"
+	@echo "  all            Run lint and test"
 
 # Install dependencies
 install:
 	pip3 install --upgrade pip
 	pip3 install -r requirements.txt
+
+# Install CLI system-wide in editable mode
+install-cli: install
+	pip3 install -e .
+
+# Install CLI in editable mode (development)
+install-dev: install
+	pip3 install -e .
+
+# Build distribution packages
+build:
+	python -m build
 
 # Run all linting checks
 lint:
