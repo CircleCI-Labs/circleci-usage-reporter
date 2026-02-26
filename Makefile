@@ -4,8 +4,8 @@
 help:
 	@echo "Available commands:"
 	@echo "  install        Install all dependencies"
-	@echo "  install-cli    Install CLI system-wide (editable mode)"
-	@echo "  install-dev    Install CLI in editable mode for development"
+	@echo "  install-cli    Install CLI in editable mode"
+	@echo "  install-dev    Install CLI in editable mode + dev/test dependencies"
 	@echo "  build          Build distribution packages"
 	@echo "  lint           Run all linting checks"
 	@echo "  test           Run tests with coverage"
@@ -21,9 +21,10 @@ install:
 install-cli: install
 	pip3 install -e .
 
-# Install CLI in editable mode (development)
+# Install CLI in editable mode with dev/test dependencies
 install-dev: install
 	pip3 install -e .
+	pip3 install pytest pytest-cov flake8
 
 # Build distribution packages
 build:
