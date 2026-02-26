@@ -20,6 +20,7 @@ jobs:
           environment:
             MPLBACKEND: Agg
           command: |
+            mkdir -p test-results
             python -m pytest tests/ -v \
               --cov=src \
               --cov-report=xml:test-results/coverage.xml \
@@ -27,7 +28,10 @@ jobs:
               --cov-fail-under=50 \
               --junitxml=test-results/junit.xml
       - store_test_results:
-          path: test-results
+          path: test-results/junit.xml
+      - store_artifacts:
+          path: test-results/coverage.xml
+          destination: coverage.xml
       - store_artifacts:
           path: test-results/coverage-html
           destination: coverage-report
