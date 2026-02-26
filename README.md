@@ -39,39 +39,19 @@ CircleCI's Usage API provides powerful data about your CI/CD pipelines. This too
 
 ### Install with pip
 
-#### 1. Install pyenv (if not already installed)
-
-Install pyenv following the [official installation instructions](https://github.com/pyenv/pyenv#installation). Alternatively, you can use any other Python version manager (e.g., conda, asdf).
-
-#### 2. Install Python 3.8+ using pyenv
-
-```bash
-pyenv install 3.11.14  # or any 3.8+ version
-```
-
-#### 3. Clone and install the package
-
 ```bash
 git clone git@github.com:CircleCI-Labs/circleci-usage-reporter.git
 cd circleci-usage-reporter
-pyenv local 3.11.14     # Set Python version for this project
 pip install -e .
 ```
 
-After installation, the `circleci-usage-reporter` command will be available system-wide:
+After installation, the `circleci-usage-reporter` command is available system-wide:
 
 ```bash
-# View all available commands
 circleci-usage-reporter --help
-
-# Get usage report
-circleci-usage-reporter get \
-  --org-id <your-org-id> \
-  --start-date 2024-01-01 \
-  --end-date 2024-01-31
 ```
 
-**Note:** Use `pip install -e .` for an editable install (changes to source code are immediately available) or `pip install .` for a regular install. If you encounter issues with editable installs, ensure you have pip 21.3+ (upgrade with `pip install --upgrade pip`).
+> **Note:** Requires Python 3.8+. Use a virtual environment or a version manager such as pyenv, conda, or asdf if needed.
 
 ### With Docker
 
@@ -82,24 +62,160 @@ docker build . -t circleci-usage-reporter:latest
 docker run --rm circleci-usage-reporter --help
 ```
 
+## Commands
+
+All commands share a common CLI entry point: `circleci-usage-reporter <command> [options]`.
+
+### `get` — Download a usage report
+
+Requests a usage export from the CircleCI API, waits for it to be ready using exponential backoff, downloads all result files, and automatically merges them into a single CSV.
+
+```bash
+circleci-usage-reporter get \
+  --org-id <your-org-id> \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31 \
+  --output usage_report.csv
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--org-id` | `$ORG_ID` | CircleCI organisation ID |
+| `--api-token` | `$CIRCLECI_API_TOKEN` | CircleCI personal API token |
+| `--start-date` | required | Report start date (YYYY-MM-DD) |
+| `--end-date` | required | Report end date (YYYY-MM-DD) |
+| `--output` | `usage_report.csv` | Output file path |
+
+**Using environment variables instead of flags:**
+
+```bash
+export ORG_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+export CIRCLECI_API_TOKEN="your-personal-api-token"
+
+circleci-usage-reporter get \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31
+```
+
+**Saving to a specific directory:**
+
+```bash
+circleci-usage-reporter get \
+  --org-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --start-date 2024-01-01 \
+  --end-date 2024-01-31 \
+  --output ~/reports/january_2024.csv
+```
+
+> **Finding your Org ID:** Go to **app.circleci.com → Organization Settings** — the ID is shown at the top of the page.  
+> **Getting an API token:** Go to **app.circleci.com → User Settings → Personal API Tokens**.
+
+---
+
+### `merge` — Merge CSV files
+
+Merges multiple CSV files from a directory into a single file, deduplicating headers.
+
+```bash
+circleci-usage-reporter merge \
+  --input-dir /tmp/reports \
+  --output merged.csv
+```
+
+---
+
+### `send-to-datadog` — Send data to Datadog
+
+Processes a usage CSV and sends metrics to Datadog.
+
+```bash
+circleci-usage-reporter send-to-datadog usage_report.csv \
+  --api-key <dd-api-key> \
+  --app-key <dd-app-key>
+```
+
+See [`examples/datadog/`](examples/datadog/README.md) for full setup instructions.
+
+---
+
+### `send-to-doit` — Send data to DoiT
+
+Uploads a usage CSV to the DoiT DataHub API.
+
+```bash
+circleci-usage-reporter send-to-doit usage_report.csv \
+  --api-key <doit-api-key>
+```
+
+See [`examples/doit/`](examples/doit/README.md) for full setup instructions.
+
+---
+
+### `create-graph` — Generate a credits graph
+
+Creates a bar chart of total credits consumed per project from a usage CSV.
+
+```bash
+circleci-usage-reporter create-graph usage_report.csv \
+  --output /tmp/credits_by_project.png
+```
+
+---
+
+### `run-analysis` — Generate an HTML analysis report
+
+Runs a Jupyter notebook analysis against a usage CSV and produces a self-contained HTML report.
+
+```bash
+circleci-usage-reporter run-analysis \
+  --type job \
+  --project my-project \
+  --input usage_report.csv
+```
+
+| `--type` value | Description |
+|----------------|-------------|
+| `job` | Job-level credit and duration breakdown |
+| `project` | Project-level credit usage over time |
+| `compute-credits` | Compute credit consumption by resource class |
+| `resource` | Resource class utilisation analysis |
+
+---
+
+## Environment variables
+
+| Variable | Used by |
+|----------|---------|
+| `CIRCLECI_API_TOKEN` | `get` |
+| `ORG_ID` | `get` |
+| `DD_API_KEY` | `send-to-datadog` |
+| `DD_APP_KEY` | `send-to-datadog` |
+| `DOIT_API_KEY` | `send-to-doit` |
+
+---
+
 ## What's Included
 
-* **Utility to download usage data** - Quickly export data from the Usage API
-* **Data processing scripts** - Clean and transform raw exports for analysis  
-* **Visualization examples** - Templates for popular BI tools and custom dashboards
+* **Unified CLI** — all commands under a single `circleci-usage-reporter` entry point
+* **Auto-merging downloads** — `get` downloads and merges report files automatically
+* **Exponential backoff** — `get` polls for report readiness efficiently rather than waiting a fixed interval
+* **Datadog integration** — send usage metrics directly to Datadog
+* **DoiT integration** — upload usage data to DoiT DataHub
+* **Analysis reports** — generate HTML reports from Jupyter notebooks
+* **Visualization** — credit usage graphs per project
 
 ## Minimum Requirements
 
 * Python 3.8+
 * A CircleCI personal API token ([get yours here](https://app.circleci.com/settings/user/tokens))
-* An organisation ID (find this in "Organization Settings")
+* An organisation ID (found in **Organization Settings** in the CircleCI app)
 
 ## Documentation
 
 * [**API Reference**](https://circleci.com/docs/api/v2/index.html#tag/Usage) - Usage API endpoints and data schema
 * **[Examples](examples/)** - BI tool templates, analysis notebooks, and integration guides
 
-### Ways to Contribute
+## Contributing
 
 * Request additions
 * Add new visualization templates
