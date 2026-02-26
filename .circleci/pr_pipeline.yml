@@ -11,16 +11,51 @@ jobs:
       - checkout
       - run:
           name: Install dependencies
-          command: |
-            make install
+          command: pip install -e . && pip install pytest pytest-cov flake8
       - run:
           name: Linting
-          command: |
-            make lint
+          command: make lint
       - run:
-          name: Testing
+          name: Testing with coverage
           command: |
-            make test
+            python -m pytest tests/ -v \
+              --cov=src \
+              --cov-report=xml:test-results/coverage.xml \
+              --cov-report=html:test-results/coverage-html \
+              --cov-fail-under=50 \
+              --junitxml=test-results/junit.xml
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results/coverage-html
+          destination: coverage-report
+
+  cli-smoke-test:
+    docker:
+      - image: cimg/python:3.13.5
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install package
+          command: pip install -e .
+      - run:
+          name: Verify CLI entry point
+          command: circleci-usage-reporter --help
+      - run:
+          name: Verify all subcommands respond to --help
+          command: |
+            circleci-usage-reporter get --help
+            circleci-usage-reporter merge --help
+            circleci-usage-reporter send-to-datadog --help
+            circleci-usage-reporter send-to-doit --help
+            circleci-usage-reporter create-graph --help
+            circleci-usage-reporter run-analysis --help
+      - run:
+          name: Verify standalone module entrypoints
+          command: |
+            python -m src.merge --help
+            python -m src.create_graph --help
 
   build-docker-image:
     docker:
@@ -33,11 +68,17 @@ jobs:
           name: Build docker image
           command: docker build . -t usage-reporter:latest
       - run:
-          name: Simple test image is functional
+          name: Verify CLI works in container
           command: docker run --rm usage-reporter --help
+      - run:
+          name: Verify all subcommands work in container
+          command: |
+            docker run --rm usage-reporter get --help
+            docker run --rm usage-reporter merge --help
 
 workflows:
   testing:
     jobs:
       - lint-and-test
+      - cli-smoke-test
       - build-docker-image
