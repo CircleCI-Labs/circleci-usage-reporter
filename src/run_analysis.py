@@ -117,7 +117,7 @@ def find_highest_credit_project(csv_path="/tmp/merged.csv"):
         return "your-project"
 
 
-def run_existing_notebook_with_params(analysis_type, project_name=None, individual_job_name=None, credit_cost=0.0006):
+def run_existing_notebook_with_params(analysis_type, project_name=None, individual_job_name=None, credit_cost=0.0006, data_file='/tmp/merged.csv'):
     """
     Run existing simplified notebook with parameters set via environment variables.
     Falls back to creating a minimal notebook if the simplified version doesn't exist.
@@ -136,7 +136,7 @@ def run_existing_notebook_with_params(analysis_type, project_name=None, individu
         
         # Set environment variables for the notebook
         env_vars = {
-            'FILEPATH': '/tmp/merged.csv',
+            'FILEPATH': data_file,
             'CREDIT_COST': str(credit_cost)
         }
         
@@ -153,10 +153,10 @@ def run_existing_notebook_with_params(analysis_type, project_name=None, individu
         return notebook_file
     else:
         print("Simplified notebook not found, creating minimal notebook")
-        return create_minimal_notebook(analysis_type, project_name, individual_job_name, credit_cost)
+        return create_minimal_notebook(analysis_type, project_name, individual_job_name, credit_cost, data_file)
 
 
-def create_minimal_notebook(analysis_type, project_name=None, individual_job_name=None, credit_cost=0.0006):
+def create_minimal_notebook(analysis_type, project_name=None, individual_job_name=None, credit_cost=0.0006, data_file='/tmp/merged.csv'):
     """
     Create a minimal notebook that uses the common analysis library.
     This replaces the need for complex parameter injection.
@@ -164,13 +164,13 @@ def create_minimal_notebook(analysis_type, project_name=None, individual_job_nam
     
     # Create notebook content based on analysis type
     if analysis_type == 'job':
-        cells = create_job_analysis_cells(project_name, individual_job_name, credit_cost)
+        cells = create_job_analysis_cells(project_name, individual_job_name, credit_cost, data_file)
     elif analysis_type == 'project':
-        cells = create_project_analysis_cells(project_name, credit_cost)
+        cells = create_project_analysis_cells(project_name, credit_cost, data_file)
     elif analysis_type == 'compute-credits':
-        cells = create_compute_credits_cells(credit_cost)
+        cells = create_compute_credits_cells(credit_cost, data_file)
     elif analysis_type == 'resource':
-        cells = create_resource_analysis_cells(project_name, credit_cost)
+        cells = create_resource_analysis_cells(project_name, credit_cost, data_file)
     else:
         raise ValueError(f"Unknown analysis type: {analysis_type}")
     
@@ -192,8 +192,9 @@ def create_minimal_notebook(analysis_type, project_name=None, individual_job_nam
         "nbformat_minor": 4
     }
     
-    # Write to temporary file
-    temp_notebook = tempfile.NamedTemporaryFile(mode='w', suffix='.ipynb', delete=False, dir=".")
+    # Write to temporary file in src/ so analysis.py is importable during execution
+    src_dir = Path(__file__).parent
+    temp_notebook = tempfile.NamedTemporaryFile(mode='w', suffix='.ipynb', delete=False, dir=str(src_dir))
     json.dump(notebook, temp_notebook, indent=2)
     temp_notebook.close()
     
@@ -243,7 +244,7 @@ def create_base_setup_cells(org_name=None, report_name="Usage", project_name=Non
     ]
 
 
-def create_job_analysis_cells(project_name, individual_job_name, credit_cost):
+def create_job_analysis_cells(project_name, individual_job_name, credit_cost, data_file='/tmp/merged.csv'):
     """Create cells for job analysis notebook."""
     import os
     org_name = os.getenv("CIRCLE_PROJECT_USERNAME", "unknown-org")
@@ -258,7 +259,7 @@ def create_job_analysis_cells(project_name, individual_job_name, credit_cost):
             "source": [
                 f"# Load and process data\n",
                 f"df, project_dfs = analysis.load_circleci_data(\n",
-                f"    filepath='/tmp/merged.csv',\n",
+                f"    filepath='{data_file}',\n",
                 f"    project_name='{project_name}',\n",
                 f"    credit_cost={credit_cost}\n",
                 f")\n",
@@ -356,7 +357,7 @@ def create_job_analysis_cells(project_name, individual_job_name, credit_cost):
     return cells
 
 
-def create_project_analysis_cells(project_name, credit_cost):
+def create_project_analysis_cells(project_name, credit_cost, data_file='/tmp/merged.csv'):
     """Create cells for project analysis notebook."""
     import os
     org_name = os.getenv("CIRCLE_PROJECT_USERNAME", "unknown-org")
@@ -371,7 +372,7 @@ def create_project_analysis_cells(project_name, credit_cost):
             "source": [
                 f"# Load and process data\n",
                 f"df, project_dfs = analysis.load_circleci_data(\n",
-                f"    filepath='/tmp/merged.csv',\n",
+                f"    filepath='{data_file}',\n",
                 f"    project_name='{project_name}',\n",
                 f"    credit_cost={credit_cost}\n",
                 f")\n",
@@ -441,7 +442,7 @@ def create_project_analysis_cells(project_name, credit_cost):
     return cells
 
 
-def create_compute_credits_cells(credit_cost):
+def create_compute_credits_cells(credit_cost, data_file='/tmp/merged.csv'):
     """Create cells for compute credits analysis."""
     import os
     org_name = os.getenv("CIRCLE_PROJECT_USERNAME", "unknown-org")
@@ -455,7 +456,7 @@ def create_compute_credits_cells(credit_cost):
             "outputs": [],
             "source": [
                 f"# Load data for compute credits analysis\n",
-                f"df = pd.read_csv('/tmp/merged.csv', escapechar='\\\\', na_values=['\\\\N'])\n",
+                f"df = pd.read_csv('{data_file}', escapechar='\\\\', na_values=['\\\\N'])\n",
                 f"print(f'✅ Loaded {{len(df):,}} rows of data')\n",
                 f"\n",
                 f"# Filter to valid records\n",
@@ -518,7 +519,7 @@ def create_compute_credits_cells(credit_cost):
     return cells
 
 
-def create_resource_analysis_cells(project_name, credit_cost):
+def create_resource_analysis_cells(project_name, credit_cost, data_file='/tmp/merged.csv'):
     """Create cells for comprehensive resource utilization analysis notebook."""
     import os
     org_name = os.getenv("CIRCLE_PROJECT_USERNAME", "unknown-org")
@@ -533,7 +534,7 @@ def create_resource_analysis_cells(project_name, credit_cost):
             "source": [
                 f"# Load and process data\n",
                 f"df, project_dfs = analysis.load_circleci_data(\n",
-                f"    filepath='/tmp/merged.csv',\n",
+                f"    filepath='{data_file}',\n",
                 f"    project_name='{project_name}',\n",
                 f"    credit_cost={credit_cost}\n",
                 f")\n",
@@ -864,7 +865,7 @@ def run_notebook_conversion(notebook_path, output_dir, analysis_type):
     notebook_name = Path(notebook_path).name
     
     cmd = [
-        "jupyter", "nbconvert",
+        sys.executable, "-m", "nbconvert",
         "--to", "html",
         "--execute",
         "--no-input",  # Hide all code cells, show only outputs
@@ -874,20 +875,19 @@ def run_notebook_conversion(notebook_path, output_dir, analysis_type):
         "--ExecutePreprocessor.timeout=600"  # 10 minute timeout
     ]
     
+    src_dir = str(Path(__file__).parent)
     print(f"Running command: {' '.join(cmd)}")
-    print(f"Working directory: {os.getcwd()}")
-    
+    print(f"Working directory: {src_dir}")
+
     try:
-        # Run from current directory (src/) where the analysis.py is located
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True, cwd=src_dir)
         print(f"✅ {analysis_config['title']} generated successfully!")
         print(f"📄 HTML report saved to: {output_file}")
         return output_file
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error converting notebook: {e}")
-        print(f"STDOUT: {e.stdout}")
-        print(f"STDERR: {e.stderr}")
-        sys.exit(1)
+        raise RuntimeError(
+            f"❌ Notebook conversion failed.\nSTDOUT: {e.stdout}\nSTDERR: {e.stderr}"
+        ) from e
 
 
 def add_parser(subparsers):
@@ -933,6 +933,9 @@ def add_parser(subparsers):
 
 def handle(args):
     """Execute the run-analysis command."""
+    # Resolve to absolute path so the notebook can find it regardless of cwd
+    args.data_file = str(Path(args.data_file).resolve())
+
     # Validate data file exists
     if not Path(args.data_file).exists():
         print(f"❌ Data file not found: {args.data_file}", file=sys.stderr)
@@ -960,17 +963,21 @@ def handle(args):
         analysis_type=args.type,
         project_name=project_name,
         individual_job_name=args.job,
-        credit_cost=args.credit_cost
+        credit_cost=args.credit_cost,
+        data_file=args.data_file
     )
     
-    # Run notebook conversion
+    # Run notebook conversion, ensuring temp file is always cleaned up
     print("Converting notebook to HTML...")
-    output_file = run_notebook_conversion(notebook_path, output_dir, args.type)
-    
-    # Clean up temporary file
-    if Path(notebook_path).exists():
-        os.unlink(notebook_path)
-    
+    try:
+        output_file = run_notebook_conversion(notebook_path, output_dir, args.type)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    finally:
+        if Path(notebook_path).exists():
+            os.unlink(notebook_path)
+
     print(f"\n✅ Analysis complete!")
     print(f"📊 View the report at: {output_file}")
     return 0

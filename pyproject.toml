@@ -24,7 +24,9 @@ dependencies = [
     "requests>=2.32.0",
     "pandas>=2.3.0",
     "matplotlib>=3.10.0",
-    "datadog-api-client>=2.40.0"
+    "datadog-api-client>=2.40.0",
+    "nbconvert>=7.0.0",
+    "ipykernel>=6.0.0"
 ]
 
 [project.urls]
