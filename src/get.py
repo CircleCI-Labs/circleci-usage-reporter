@@ -132,6 +132,11 @@ def _download_csv_files(download_urls, temp_dir):
     """Download and extract CSV files from URLs."""
     for idx, url in enumerate(download_urls):
         r = requests.get(url)
+        if r.status_code != 200:
+            print(f"Error: Failed to download file {idx}. Status: {r.status_code}", file=sys.stderr)
+            print(f"Response: {r.text}", file=sys.stderr)
+            raise RuntimeError(f"Download failed for file {idx} (status {r.status_code})")
+
         # Save compressed file temporarily
         temp_gz_path = os.path.join(temp_dir, f"usage_report_{idx}.csv.gz")
         with open(temp_gz_path, "wb") as f:
