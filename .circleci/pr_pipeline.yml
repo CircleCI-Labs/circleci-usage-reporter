@@ -30,11 +30,8 @@ jobs:
       - store_test_results:
           path: test-results/junit.xml
       - store_artifacts:
-          path: test-results/coverage.xml
-          destination: coverage.xml
-      - store_artifacts:
-          path: test-results/coverage-html
-          destination: coverage-report
+          path: test-results/coverage-html/index.html
+          destination: coverage-report/index.html
 
   cli-smoke-test:
     docker:
