@@ -174,12 +174,10 @@ def _create_job_url(row):
 def remove_unnecessary_columns(df):
     """Remove columns that aren't needed for analysis."""
     columns_to_remove = [
-        "ORGANIZATION_ID", "ORGANIZATION_NAME", "ORGANIZATION_CREATED_DATE",
+        "ORGANIZATION_ID", 
+        "ORGANIZATION_CREATED_DATE",
         "PROJECT_ID", "PROJECT_CREATED_DATE", "VCS_NAME", "VCS_URL",
         "IS_UNREGISTERED_USER", "PIPELINE_TRIGGER_SOURCE",
-        # Keep CPU/RAM columns for resource analysis
-        # "MEDIAN_CPU_UTILIZATION_PCT", "MAX_CPU_UTILIZATION_PCT",
-        # "MEDIAN_RAM_UTILIZATION_PCT", "MAX_RAM_UTILIZATION_PCT",
     ]
     # Only remove columns that actually exist
     existing_cols_to_remove = [col for col in columns_to_remove if col in df.columns]
@@ -193,11 +191,11 @@ def create_project_datasets(df, project_name):
     # Base project data
     ps_jobs = df[(df["PROJECT_NAME"] == project_name) & (df["JOB_RUN_NUMBER"].notna())]
     
-    # Branch-specific datasets
+    # Master branch-specific datasets
     ps_master_jobs = ps_jobs[ps_jobs["VCS_BRANCH"] == "master"]
     ps_master_failed_jobs = ps_master_jobs[ps_master_jobs["JOB_BUILD_STATUS"] == "failed"]
     
-    # PR jobs (exclude test branches)
+    # PR branch-specific datasets (exclude test branches)
     ps_pr_jobs = ps_jobs[
         (ps_jobs["VCS_BRANCH"] != "master") & 
         (~ps_jobs["VCS_BRANCH"].str.startswith('test/', na=False))
