@@ -890,12 +890,8 @@ def run_notebook_conversion(notebook_path, output_dir, analysis_type):
         ) from e
 
 
-def add_parser(subparsers):
-    """Add run-analysis command parser."""
-    parser = subparsers.add_parser(
-        'run-analysis',
-        help='Run CircleCI usage analysis and generate reports'
-    )
+def _add_arguments(parser):
+    """Add run-analysis arguments to a parser."""
     parser.add_argument(
         '--type',
         required=True,
@@ -929,6 +925,15 @@ def add_parser(subparsers):
         help='Cost per credit in dollars (default: 0.0006)'
     )
     return parser
+
+
+def add_parser(subparsers):
+    """Add run-analysis command parser."""
+    parser = subparsers.add_parser(
+        'run-analysis',
+        help='Run CircleCI usage analysis and generate reports'
+    )
+    return _add_arguments(parser)
 
 
 def handle(args):
@@ -986,7 +991,7 @@ def handle(args):
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description='Run CircleCI Usage Analysis')
-    add_parser(parser)
+    _add_arguments(parser)
     args = parser.parse_args()
     sys.exit(handle(args))
 

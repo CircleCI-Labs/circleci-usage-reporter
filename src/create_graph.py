@@ -10,12 +10,8 @@ import sys
 import pandas as pd
 
 
-def add_parser(subparsers):
-    """Add create-graph command parser."""
-    parser = subparsers.add_parser(
-        'create-graph',
-        help='Create visualization graphs from usage data'
-    )
+def _add_arguments(parser):
+    """Add create-graph arguments to a parser."""
     parser.add_argument(
         'csv_file',
         help='Path to the merged CSV file'
@@ -26,6 +22,15 @@ def add_parser(subparsers):
         help='Output file path for the graph (default: /tmp/reports/total_credits_per_project.png)'
     )
     return parser
+
+
+def add_parser(subparsers):
+    """Add create-graph command parser."""
+    parser = subparsers.add_parser(
+        'create-graph',
+        help='Create visualization graphs from usage data'
+    )
+    return _add_arguments(parser)
 
 
 def handle(args):
@@ -76,7 +81,7 @@ def handle(args):
 def main():
     """Standalone entry point."""
     parser = argparse.ArgumentParser(description='Create visualization graphs from usage data')
-    add_parser(parser)
+    _add_arguments(parser)
     args = parser.parse_args()
     sys.exit(handle(args))
 

@@ -9,12 +9,8 @@ import os
 import sys
 
 
-def add_parser(subparsers):
-    """Add merge command parser."""
-    parser = subparsers.add_parser(
-        'merge',
-        help='Merge multiple CSV files into one'
-    )
+def _add_arguments(parser):
+    """Add merge arguments to a parser."""
     parser.add_argument(
         '--input-dir',
         default='/tmp/reports',
@@ -26,6 +22,15 @@ def add_parser(subparsers):
         help='Output file path for merged CSV (default: /tmp/reports/merged.csv)'
     )
     return parser
+
+
+def add_parser(subparsers):
+    """Add merge command parser."""
+    parser = subparsers.add_parser(
+        'merge',
+        help='Merge multiple CSV files into one'
+    )
+    return _add_arguments(parser)
 
 
 def handle(args):
@@ -65,7 +70,7 @@ def handle(args):
 def main():
     """Standalone entry point."""
     parser = argparse.ArgumentParser(description='Merge multiple CSV files into one')
-    add_parser(parser)
+    _add_arguments(parser)
     args = parser.parse_args()
     sys.exit(handle(args))
 
