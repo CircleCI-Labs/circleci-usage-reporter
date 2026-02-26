@@ -17,6 +17,8 @@ jobs:
           command: make lint
       - run:
           name: Testing with coverage
+          environment:
+            MPLBACKEND: Agg
           command: |
             python -m pytest tests/ -v \
               --cov=src \
