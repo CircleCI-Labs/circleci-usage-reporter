@@ -92,8 +92,8 @@ jobs:
       - install-requirements
       - run:
           environment:
-            START_DATE: "2025-07-01"
-            END_DATE: "2025-08-01"
+            START_DATE: "2026-01-01"
+            END_DATE: "2026-02-01"
             ORG_ID: << pipeline.parameters.org_id >>
           name: Get Usage Report
           command: |
@@ -120,6 +120,48 @@ jobs:
       - run:
           name: Send metrics to Datadog
           command: circleci-usage-reporter send-to-datadog /tmp/merged.csv
+
+  generate-job-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "job"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
+
+  generate-project-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "project"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
+
+  generate-compute-credits-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "compute-credits"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
 
   generate-resource-class-analysis:
     executor: python-large
@@ -168,9 +210,21 @@ workflows:
       - generate-usage-report:
           context:
             - my-context
+      - generate-job-analysis:
+          requires:
+            - generate-usage-report
+      - generate-project-analysis:
+          requires:
+            - generate-usage-report
+      - generate-compute-credits-analysis:
+          requires:
+            - generate-usage-report
       - generate-resource-class-analysis:
           requires:
             - generate-usage-report
       - gather-artifacts:
           requires:
+            - generate-job-analysis
+            - generate-project-analysis
+            - generate-compute-credits-analysis
             - generate-resource-class-analysis
