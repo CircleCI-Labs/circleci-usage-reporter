@@ -224,7 +224,7 @@ workflows:
             - generate-usage-report
       - gather-artifacts:
           requires:
-            - generate-job-analysis
-            - generate-project-analysis
-            - generate-compute-credits-analysis
-            - generate-resource-class-analysis
+            - generate-job-analysis: terminal
+            - generate-project-analysis: terminal
+            - generate-compute-credits-analysis: terminal
+            - generate-resource-class-analysis: terminal
