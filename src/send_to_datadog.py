@@ -256,12 +256,8 @@ class DatadogCSVIngest:
         return results
 
 
-def add_parser(subparsers):
-    """Add send-to-datadog command parser."""
-    parser = subparsers.add_parser(
-        'send-to-datadog',
-        help='Send usage data to Datadog'
-    )
+def _add_arguments(parser):
+    """Add arguments to a parser (used by both add_parser and standalone main)."""
     parser.add_argument(
         'csv_file',
         help='Path to the CSV file to process'
@@ -298,6 +294,15 @@ def add_parser(subparsers):
         help='Process without sending'
     )
     return parser
+
+
+def add_parser(subparsers):
+    """Add send-to-datadog command parser."""
+    parser = subparsers.add_parser(
+        'send-to-datadog',
+        help='Send usage data to Datadog'
+    )
+    return _add_arguments(parser)
 
 
 def handle(args):
@@ -386,7 +391,7 @@ def main():
     """Standalone entry point."""
     import sys
     parser = argparse.ArgumentParser(description='Process a CSV file and send to Datadog.')
-    add_parser(parser)
+    _add_arguments(parser)
     args = parser.parse_args()
     sys.exit(handle(args))
 
