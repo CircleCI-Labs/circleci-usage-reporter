@@ -528,8 +528,8 @@ def analyze_resource_utilization(df, cpu_threshold=40, ram_threshold=40, min_job
     
     # Resource class analysis - now including executor information
     resource_class_stats = resource_df.groupby('EXECUTOR_RESOURCE_CLEAN').agg({
-        'MEDIAN_CPU_UTILIZATION_PCT': ['mean', 'median'],
-        'MEDIAN_RAM_UTILIZATION_PCT': ['mean', 'median'],
+        'MEDIAN_CPU_UTILIZATION_PCT': ['mean', 'median', 'std'],
+        'MEDIAN_RAM_UTILIZATION_PCT': ['mean', 'median', 'std'],
         'COST': ['sum', 'mean'],
         'JOB_RUN_SECONDS': ['mean', 'median'],
         'JOB_NAME': 'nunique',  # Number of unique jobs using this resource class

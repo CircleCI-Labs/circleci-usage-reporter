@@ -33,6 +33,7 @@ commands:
           name: Install dependencies
           command: |
             pip install --user -r requirements.txt
+            pip install --user -e .
       - save_cache:
           key: pip-deps-v1-{{ checksum "requirements.txt" }}
           paths:
@@ -49,6 +50,7 @@ commands:
           name: Install Python dependencies
           command: |
             pip3 install -r requirements.txt
+            pip3 install -e .
       - run:
           name: Install Jupyter
           command: |
@@ -76,11 +78,10 @@ commands:
       - run:
           name: Execute << parameters.analysis_type >> analysis
           command: |
-            cd src
             if [ "<< pipeline.parameters.job_name >>" != "" ]; then
-              python run_analysis.py --type << parameters.analysis_type >> --job << pipeline.parameters.job_name >> --credit-cost << pipeline.parameters.cost_per_credit >>
+              circleci-usage-reporter run-analysis --type << parameters.analysis_type >> --job << pipeline.parameters.job_name >> --credit-cost << pipeline.parameters.cost_per_credit >> --input /tmp/merged.csv
             else
-              python run_analysis.py --type << parameters.analysis_type >> --credit-cost << pipeline.parameters.cost_per_credit >>
+              circleci-usage-reporter run-analysis --type << parameters.analysis_type >> --credit-cost << pipeline.parameters.cost_per_credit >> --input /tmp/merged.csv
             fi
 
 jobs:
@@ -91,21 +92,17 @@ jobs:
       - install-requirements
       - run:
           environment:
-            START_DATE: "2025-07-01"
-            END_DATE: "2025-08-01"
+            START_DATE: "2026-01-01"
+            END_DATE: "2026-02-01"
             ORG_ID: << pipeline.parameters.org_id >>
           name: Get Usage Report
           command: |
             ORG_ID="$(echo "${ORG_ID}" | circleci env subst)"
-            python ./src/get_usage_report.py
+            circleci-usage-reporter get --org-id "$ORG_ID" --start-date "$START_DATE" --end-date "$END_DATE" --output /tmp/reports/merged.csv
       - run:
-          name: Merge multiple csv files together and do some sorting 
+          name: Create a graph from the merged data
           command: |
-            python ./src/merge.py
-      - run:
-          name: Create a graph from the merged data 
-          command: |
-            python ./src/create_graph.py
+            circleci-usage-reporter create-graph /tmp/reports/merged.csv
       - persist_to_workspace:
           root: /tmp/reports
           paths:
@@ -122,7 +119,49 @@ jobs:
       - install-requirements
       - run:
           name: Send metrics to Datadog
-          command: python ./src/send_to_datadog.py /tmp/merged.csv
+          command: circleci-usage-reporter send-to-datadog /tmp/merged.csv
+
+  generate-job-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "job"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
+
+  generate-project-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "project"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
+
+  generate-compute-credits-analysis:
+    executor: python-large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - install-all-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis_type: "compute-credits"
+      - persist_to_workspace:
+          root: /tmp
+          paths: reports
 
   generate-resource-class-analysis:
     executor: python-large
@@ -159,10 +198,11 @@ jobs:
           name: Install dependencies
           command: |
             pip3 install -r requirements.txt
+            pip3 install -e .
       - run:
           name: Send metrics to DoiT
           command: |
-            python ./src/send_to_doit.py /tmp/merged.csv
+            circleci-usage-reporter send-to-doit /tmp/merged.csv
 
 workflows:
   use-usage-api:
@@ -170,9 +210,21 @@ workflows:
       - generate-usage-report:
           context:
             - my-context
+      - generate-job-analysis:
+          requires:
+            - generate-usage-report
+      - generate-project-analysis:
+          requires:
+            - generate-usage-report
+      - generate-compute-credits-analysis:
+          requires:
+            - generate-usage-report
       - generate-resource-class-analysis:
           requires:
             - generate-usage-report
       - gather-artifacts:
           requires:
-            - generate-resource-class-analysis
+            - generate-job-analysis: terminal
+            - generate-project-analysis: terminal
+            - generate-compute-credits-analysis: terminal
+            - generate-resource-class-analysis: terminal
