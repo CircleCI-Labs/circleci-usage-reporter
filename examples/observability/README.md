@@ -5,13 +5,38 @@ Store CircleCI Usage API data in Postgres and visualize it with the provisioned 
 ## Prerequisites
 
 - Docker and Docker Compose
-- CircleCI Personal API Token (`CIRCLECI_API_TOKEN`)
-- CircleCI Organization ID (`ORG_ID`)
-- `circleci-usage-reporter` installed (`pip install -e .`)
+- Python 3.8+ (a virtualenv is created automatically by `demo.sh`)
+- CircleCI Personal API Token (`CIRCLECI_API_TOKEN`) — **live mode only**
+- CircleCI Organization ID (`ORG_ID`) — **live mode only**
 
 ## Quick start
 
-### 1. Start the observability stack
+### Fastest path: run the demo script
+
+From the repo root (no CircleCI token required for offline mode). The script creates `.venv` and installs dependencies automatically — do **not** use system `pip install` on macOS/Homebrew Python.
+
+```bash
+chmod +x examples/observability/demo.sh
+./examples/observability/demo.sh --offline
+```
+
+| Mode | Command | What it does |
+|------|---------|--------------|
+| Offline (default) | `./demo.sh --offline` | Starts compose, loads `fixtures/sample_usage.csv`, opens-ready Grafana |
+| Live API | `./demo.sh --live` | Requires `ORG_ID` + `CIRCLECI_API_TOKEN`; runs `get` then `store-metrics` |
+| Stack already up | `./demo.sh --offline --no-compose` | Skips `docker compose up` |
+
+**Manual install** (if not using `demo.sh`):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+### Manual setup
+
+#### 1. Start the observability stack
 
 ```bash
 docker compose -f examples/observability/docker-compose.yml up -d

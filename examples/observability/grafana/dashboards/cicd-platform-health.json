@@ -92,7 +92,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(DISTINCT pipeline_id) as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT COUNT(DISTINCT pipeline_id) as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -159,7 +159,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT AVG(job_run_seconds) as avg_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT AVG(job_run_seconds) as avg_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -226,7 +226,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT ROUND(100.0 * SUM(CASE WHEN job_build_status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as success_pct FROM circleci_usage WHERE job_build_status IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT ROUND(100.0 * SUM(CASE WHEN job_build_status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as success_pct FROM circleci_usage WHERE job_build_status IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -293,7 +293,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT SUM(total_credits) as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT SUM(total_credits) as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -360,7 +360,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT SUM(total_credits) * $cost_per_credit as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT SUM(total_credits) * $cost_per_credit as total FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -428,7 +428,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH ordered AS (SELECT project_name, workflow_name, job_name, job_build_status, job_run_started_at, job_run_stopped_at, LAG(job_build_status) OVER (PARTITION BY project_name, workflow_name, job_name ORDER BY job_run_started_at) as prev_status, LAG(job_run_stopped_at) OVER (PARTITION BY project_name, workflow_name, job_name ORDER BY job_run_started_at) as prev_stopped FROM circleci_usage WHERE job_build_status IN ('success','failed') AND job_run_started_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()) SELECT ROUND(AVG(EXTRACT(EPOCH FROM (job_run_started_at - prev_stopped))/60)::numeric, 1) as mttr_minutes FROM ordered WHERE job_build_status = 'success' AND prev_status = 'failed'",
+          "rawSql": "WITH ordered AS (SELECT project_name, workflow_name, job_name, job_build_status, job_run_started_at, job_run_stopped_at, LAG(job_build_status) OVER (PARTITION BY project_name, workflow_name, job_name ORDER BY job_run_started_at) as prev_status, LAG(job_run_stopped_at) OVER (PARTITION BY project_name, workflow_name, job_name ORDER BY job_run_started_at) as prev_stopped FROM circleci_usage WHERE job_build_status IN ('success','failed') AND job_run_started_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})) SELECT ROUND(AVG(EXTRACT(EPOCH FROM (job_run_started_at - prev_stopped))/60)::numeric, 1) as mttr_minutes FROM ordered WHERE job_build_status = 'success' AND prev_status = 'failed'",
           "refId": "A"
         }
       ],
@@ -536,7 +536,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pipeline_created_at::date as time, COUNT(DISTINCT pipeline_id) as pipelines FROM circleci_usage WHERE pipeline_created_at IS NOT NULL GROUP BY pipeline_created_at::date ORDER BY time",
+          "rawSql": "SELECT pipeline_created_at::date as time, COUNT(DISTINCT pipeline_id) as pipelines FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND project_name IN (${project_name:sqlstring}) GROUP BY pipeline_created_at::date ORDER BY time",
           "refId": "A"
         }
       ],
@@ -656,7 +656,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pipeline_created_at::date as time, COUNT(DISTINCT pipeline_id) as pipelines, SUM(total_credits) * $cost_per_credit as daily_cost FROM circleci_usage WHERE pipeline_created_at IS NOT NULL GROUP BY pipeline_created_at::date ORDER BY time",
+          "rawSql": "SELECT pipeline_created_at::date as time, COUNT(DISTINCT pipeline_id) as pipelines, SUM(total_credits) * $cost_per_credit as daily_cost FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND project_name IN (${project_name:sqlstring}) GROUP BY pipeline_created_at::date ORDER BY time",
           "refId": "A"
         }
       ],
@@ -744,7 +744,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT project_name || ' - ' || workflow_name as workflow_label, workflow_name, project_name, COUNT(DISTINCT workflow_id) as workflow_count, COUNT(*) as total_job_runs, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY job_run_seconds) as median_duration, AVG(job_run_seconds) as avg_duration, MAX(job_run_seconds) as longest_job_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND workflow_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY project_name, workflow_name HAVING COUNT(*) >= 5 ORDER BY median_duration DESC LIMIT 20",
+          "rawSql": "SELECT project_name || ' - ' || workflow_name as workflow_label, workflow_name, project_name, COUNT(DISTINCT workflow_id) as workflow_count, COUNT(*) as total_job_runs, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY job_run_seconds) as median_duration, AVG(job_run_seconds) as avg_duration, MAX(job_run_seconds) as longest_job_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND workflow_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY project_name, workflow_name HAVING COUNT(*) >= 5 ORDER BY median_duration DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -819,7 +819,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT project_name || ' - ' || job_name as job_label, job_name, project_name, resource_class, executor, COUNT(*) as total_job_runs, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY job_run_seconds) as median_duration, AVG(job_run_seconds) as avg_duration, MAX(job_run_seconds) as longest_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY project_name, job_name, resource_class, executor HAVING COUNT(*) >= 5 ORDER BY median_duration DESC LIMIT 40",
+          "rawSql": "SELECT project_name || ' - ' || job_name as job_label, job_name, project_name, resource_class, executor, COUNT(*) as total_job_runs, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY job_run_seconds) as median_duration, AVG(job_run_seconds) as avg_duration, MAX(job_run_seconds) as longest_duration FROM circleci_usage WHERE job_run_seconds IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY project_name, job_name, resource_class, executor HAVING COUNT(*) >= 5 ORDER BY median_duration DESC LIMIT 40",
           "refId": "A"
         }
       ],
@@ -931,7 +931,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT project_name || ' - ' || job_name as job_label, job_name, project_name, resource_class, executor, COUNT(*) as total_job_runs, AVG(median_cpu_utilization_pct) as avg_cpu_utilization, AVG(median_ram_utilization_pct) as avg_ram_utilization, AVG(job_run_seconds) as avg_duration, SUM(total_credits) * $cost_per_credit as total_cost FROM circleci_usage WHERE median_cpu_utilization_pct IS NOT NULL AND median_ram_utilization_pct IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY project_name, job_name, resource_class, executor HAVING COUNT(*) >= 5 AND (AVG(median_cpu_utilization_pct) < 40 OR AVG(median_ram_utilization_pct) < 40) ORDER BY total_cost DESC LIMIT 20",
+          "rawSql": "SELECT project_name || ' - ' || job_name as job_label, job_name, project_name, resource_class, executor, COUNT(*) as total_job_runs, AVG(median_cpu_utilization_pct) as avg_cpu_utilization, AVG(median_ram_utilization_pct) as avg_ram_utilization, AVG(job_run_seconds) as avg_duration, SUM(total_credits) * $cost_per_credit as total_cost FROM circleci_usage WHERE median_cpu_utilization_pct IS NOT NULL AND median_ram_utilization_pct IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY project_name, job_name, resource_class, executor HAVING COUNT(*) >= 5 AND (AVG(median_cpu_utilization_pct) < 40 OR AVG(median_ram_utilization_pct) < 40) ORDER BY total_cost DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -1027,7 +1027,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pipeline_created_at::date as time, SUM(compute_credits) * $cost_per_credit as \"Compute\", SUM(dlc_credits) * $cost_per_credit as \"DLC\", SUM(storage_credits) * $cost_per_credit as \"Storage\", SUM(network_credits) * $cost_per_credit as \"Network\", SUM(lease_credits) * $cost_per_credit as \"Lease\" FROM circleci_usage WHERE pipeline_created_at IS NOT NULL GROUP BY pipeline_created_at::date ORDER BY time",
+          "rawSql": "SELECT pipeline_created_at::date as time, SUM(compute_credits) * $cost_per_credit as \"Compute\", SUM(dlc_credits) * $cost_per_credit as \"DLC\", SUM(storage_credits) * $cost_per_credit as \"Storage\", SUM(network_credits) * $cost_per_credit as \"Network\", SUM(lease_credits) * $cost_per_credit as \"Lease\" FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND project_name IN (${project_name:sqlstring}) GROUP BY pipeline_created_at::date ORDER BY time",
           "refId": "A"
         }
       ],
@@ -1092,7 +1092,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT SUM(total_credits) * $cost_per_credit as total_cost FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()",
+          "rawSql": "SELECT SUM(total_credits) * $cost_per_credit as total_cost FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})",
           "refId": "A"
         }
       ],
@@ -1167,7 +1167,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT project_name, job_name, resource_class, executor, SUM(total_credits) as total_credits, AVG(total_credits) as avg_credits_per_run, COUNT(*) as job_count, SUM(total_credits) * $cost_per_credit as cost FROM circleci_usage WHERE total_credits IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY project_name, job_name, resource_class, executor ORDER BY total_credits DESC LIMIT 20",
+          "rawSql": "SELECT project_name, job_name, resource_class, executor, SUM(total_credits) as total_credits, AVG(total_credits) as avg_credits_per_run, COUNT(*) as job_count, SUM(total_credits) * $cost_per_credit as cost FROM circleci_usage WHERE total_credits IS NOT NULL AND job_name IS NOT NULL AND project_name IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY project_name, job_name, resource_class, executor ORDER BY total_credits DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -1242,7 +1242,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT project_name, job_name, resource_class, COUNT(*) as runs, SUM(total_credits) * $cost_per_credit as cost, ROUND(100.0 * SUM(total_credits) / NULLIF((SELECT SUM(total_credits) FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo()), 0), 2) as pct_of_total FROM circleci_usage WHERE (job_name ILIKE '%scan%' OR job_name ILIKE '%security%' OR job_name ILIKE '%sast%' OR job_name ILIKE '%snyk%' OR job_name ILIKE '%checkstyle%' OR job_name ILIKE '%dependency%' OR job_name ILIKE '%audit%') AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY project_name, job_name, resource_class ORDER BY cost DESC LIMIT 20",
+          "rawSql": "SELECT project_name, job_name, resource_class, COUNT(*) as runs, SUM(total_credits) * $cost_per_credit as cost, ROUND(100.0 * SUM(total_credits) / NULLIF((SELECT SUM(total_credits) FROM circleci_usage WHERE pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring})), 0), 2) as pct_of_total FROM circleci_usage WHERE (job_name ILIKE '%scan%' OR job_name ILIKE '%security%' OR job_name ILIKE '%sast%' OR job_name ILIKE '%snyk%' OR job_name ILIKE '%checkstyle%' OR job_name ILIKE '%dependency%' OR job_name ILIKE '%audit%') AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY project_name, job_name, resource_class ORDER BY cost DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -2006,7 +2006,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pipeline_created_at::date as time, ROUND(100.0 * SUM(CASE WHEN job_build_status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as success_pct FROM circleci_usage WHERE project_name = 'flaky-todo-list' AND job_build_status IS NOT NULL GROUP BY pipeline_created_at::date ORDER BY time",
+          "rawSql": "SELECT pipeline_created_at::date as time, ROUND(100.0 * SUM(CASE WHEN job_build_status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as success_pct FROM circleci_usage WHERE job_build_status IS NOT NULL AND project_name IN (${project_name:sqlstring}) GROUP BY pipeline_created_at::date ORDER BY time",
           "refId": "A"
         }
       ],
@@ -2084,7 +2084,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY 1) SELECT ROUND(AVG(credits)) as avg_daily_credits FROM daily",
+          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY 1) SELECT ROUND(AVG(credits)) as avg_daily_credits FROM daily",
           "refId": "A"
         }
       ],
@@ -2149,7 +2149,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() GROUP BY 1) SELECT ROUND(AVG(credits) * 30 * $cost_per_credit, 2) as projected_monthly_cost FROM daily",
+          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND pipeline_created_at >= $__timeFrom() AND pipeline_created_at <= $__timeTo() AND project_name IN (${project_name:sqlstring}) GROUP BY 1) SELECT ROUND(AVG(credits) * 30 * $cost_per_credit, 2) as projected_monthly_cost FROM daily",
           "refId": "A"
         }
       ],
@@ -2307,7 +2307,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL GROUP BY 1 ORDER BY 1) SELECT d as time, credits as daily_credits, AVG(credits) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as \"7d_avg\", SUM(credits) OVER (ORDER BY d) as cumulative FROM daily ORDER BY d",
+          "rawSql": "WITH daily AS (SELECT pipeline_created_at::date as d, SUM(total_credits) as credits FROM circleci_usage WHERE pipeline_created_at IS NOT NULL AND project_name IN (${project_name:sqlstring}) GROUP BY 1 ORDER BY 1) SELECT d as time, credits as daily_credits, AVG(credits) OVER (ORDER BY d ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as \"7d_avg\", SUM(credits) OVER (ORDER BY d) as cumulative FROM daily ORDER BY d",
           "refId": "A"
         }
       ],
@@ -2586,7 +2586,8 @@
         "query": "SELECT DISTINCT project_name\nFROM circleci_usage\nWHERE project_name IS NOT NULL\nORDER BY project_name",
         "refresh": 1,
         "regex": "",
-        "type": "query"
+        "type": "query",
+        "multi": true
       }
     ]
   },
