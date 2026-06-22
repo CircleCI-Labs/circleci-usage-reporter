@@ -204,6 +204,31 @@ jobs:
           command: |
             circleci-usage-reporter send-to-doit /tmp/merged.csv
 
+  weekly-store-metrics:
+    executor: python-small
+    steps:
+      - checkout
+      - install-requirements
+      - run:
+          name: Download previous week's usage report
+          environment:
+            ORG_ID: << pipeline.parameters.org_id >>
+          command: |
+            ORG_ID="$(echo "${ORG_ID}" | circleci env subst)"
+            START_DATE="$(date -u -d 'last monday - 7 days' +%Y-%m-%d)"
+            END_DATE="$(date -u -d 'last monday' +%Y-%m-%d)"
+            circleci-usage-reporter get \
+              --org-id "$ORG_ID" \
+              --start-date "$START_DATE" \
+              --end-date "$END_DATE" \
+              --output /tmp/reports/merged.csv
+      - run:
+          name: Store metrics in Postgres and Prometheus
+          command: |
+            circleci-usage-reporter store-metrics /tmp/reports/merged.csv \
+              --previous-week \
+              --replace
+
 workflows:
   use-usage-api:
     jobs:
@@ -228,3 +253,16 @@ workflows:
             - generate-project-analysis: terminal
             - generate-compute-credits-analysis: terminal
             - generate-resource-class-analysis: terminal
+
+  weekly-usage-report:
+    triggers:
+      - schedule:
+          cron: "0 9 * * 1"
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - weekly-store-metrics:
+          context:
+            - my-context
