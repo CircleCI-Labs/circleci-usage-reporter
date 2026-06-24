@@ -33,6 +33,9 @@ Examples:
 
   # Create visualization graph
   circleci-usage-reporter create-graph /tmp/reports/merged.csv
+
+  # Store weekly metrics in Postgres + Prometheus
+  circleci-usage-reporter store-metrics merged.csv --previous-week --database-url $DATABASE_URL
         """
     )
 
@@ -46,6 +49,7 @@ Examples:
     from src.send_to_doit import add_parser as add_doit_parser
     from src.create_graph import add_parser as add_create_graph_parser
     from src.run_analysis import add_parser as add_run_analysis_parser
+    from src.store_metrics import add_parser as add_store_metrics_parser
 
     # Register all command parsers
     add_get_parser(subparsers)
@@ -54,6 +58,7 @@ Examples:
     add_doit_parser(subparsers)
     add_create_graph_parser(subparsers)
     add_run_analysis_parser(subparsers)
+    add_store_metrics_parser(subparsers)
 
     return parser
 
@@ -70,6 +75,7 @@ def main():
     from src.send_to_doit import handle as handle_doit
     from src.create_graph import handle as handle_create_graph
     from src.run_analysis import handle as handle_run_analysis
+    from src.store_metrics import handle as handle_store_metrics
 
     command_handlers = {
         'get': handle_get,
@@ -78,6 +84,7 @@ def main():
         'create-graph': handle_create_graph,
         'merge': handle_merge,
         'run-analysis': handle_run_analysis,
+        'store-metrics': handle_store_metrics,
     }
 
     handler = command_handlers.get(args.command)
