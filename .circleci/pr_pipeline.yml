@@ -54,6 +54,7 @@ jobs:
             circleci-usage-reporter send-to-doit --help
             circleci-usage-reporter create-graph --help
             circleci-usage-reporter run-analysis --help
+            circleci-usage-reporter store-metrics --help
       - run:
           name: Verify standalone module entrypoints
           command: |

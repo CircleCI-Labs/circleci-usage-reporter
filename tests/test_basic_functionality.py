@@ -21,7 +21,10 @@ class TestCLI:
             a for a in parser._actions if hasattr(a, '_name_parser_map')
         )
         commands = set(subparsers_action._name_parser_map.keys())
-        assert commands == {'get', 'merge', 'send-to-datadog', 'send-to-doit', 'create-graph', 'run-analysis'}
+        assert commands == {
+            'get', 'merge', 'send-to-datadog', 'send-to-doit',
+            'create-graph', 'run-analysis', 'store-metrics',
+        }
 
     def test_unknown_command_exits_nonzero(self):
         """An unknown command exits with a non-zero code."""

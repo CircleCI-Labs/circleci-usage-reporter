@@ -1,6 +1,8 @@
 datadog_api_client==2.40.0
 matplotlib==3.10.3
 pandas==2.3.1
+prometheus_client==0.21.1
+psycopg[binary]==3.2.9
 Requests==2.32.4
 
 # Development dependencies

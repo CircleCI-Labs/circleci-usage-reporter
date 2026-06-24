@@ -151,6 +151,21 @@ See [`examples/doit/`](examples/doit/README.md) for full setup instructions.
 
 ---
 
+### `store-metrics` — Store data in Postgres + Prometheus
+
+Loads a usage CSV into Postgres (`circleci_usage` table) and pushes weekly aggregate metrics to Prometheus Pushgateway. Designed for weekly scheduled runs to build historical trends in Grafana.
+
+```bash
+circleci-usage-reporter store-metrics usage_report.csv \
+  --previous-week \
+  --database-url postgresql://usage:usage@localhost:5432/circleci_usage \
+  --pushgateway-url http://localhost:9091
+```
+
+See [`examples/observability/`](examples/observability/README.md) for the full Postgres + Grafana + Prometheus stack.
+
+---
+
 ### `create-graph` — Generate a credits graph
 
 Creates a bar chart of total credits consumed per project from a usage CSV.
@@ -191,6 +206,8 @@ circleci-usage-reporter run-analysis \
 | `DD_API_KEY` | `send-to-datadog` |
 | `DD_APP_KEY` | `send-to-datadog` |
 | `DOIT_API_KEY` | `send-to-doit` |
+| `DATABASE_URL` | `store-metrics` |
+| `PROMETHEUS_PUSHGATEWAY_URL` | `store-metrics` |
 
 ---
 
