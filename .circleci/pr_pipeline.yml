@@ -1,6 +1,7 @@
-# Unit tests and CLI smoke tests only. Do not add a live Usage API export here —
-# that endpoint is limited to 10 requests/hour/org. Live top-workflows/top-jobs
-# run on the weekly schedule trigger in .circleci/config.yml.
+# Unit tests, CLI smoke, Docker build, and one live top-N job.
+# weekly-top-usage runs top-workflows then top-jobs in the same job so they
+# share one Usage API export (10 requests/hour/org). Do not add another
+# Usage export job on this pipeline.
 #
 # Shared jobs/commands live in the URL orb. python-image default is the orb
 # executor default (pipeline parameters are not visible inside URL orbs).
@@ -26,3 +27,6 @@ workflows:
       - tf-schedule/lint-and-test
       - tf-schedule/cli-smoke-test
       - tf-schedule/build-docker-image
+      - tf-schedule/weekly-top-usage:
+          context:
+            - circle-token-cci-labs

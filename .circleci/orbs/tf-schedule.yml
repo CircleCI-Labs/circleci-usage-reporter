@@ -217,7 +217,7 @@ commands:
             python -m src.create_graph --help
 
   run-top-workflows:
-    description: Rank top workflows (live Usage API; not for PRs).
+    description: Rank top workflows (live Usage API; share a job with top-jobs).
     steps:
       - run:
           name: Rank top workflows
@@ -225,7 +225,7 @@ commands:
           command: circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
 
   run-top-jobs:
-    description: Rank top jobs (live Usage API; not for PRs).
+    description: Rank top jobs (live Usage API; share a job with top-workflows).
     steps:
       - run:
           name: Rank top jobs
@@ -508,8 +508,9 @@ jobs:
 
   weekly-top-usage:
     description: >
-      Live top-workflows / top-jobs. Rate-limited Usage API — weekly only.
-      Attach context circle-token-cci-labs at the workflow call site.
+      Live top-workflows / top-jobs in one job (one Usage export). Used on
+      the weekly schedule and once on the PR pipeline. Attach context
+      circle-token-cci-labs at the workflow call site.
     parameters:
       python-image: *python-image-param
     executor:
