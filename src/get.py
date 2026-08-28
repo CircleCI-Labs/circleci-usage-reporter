@@ -26,7 +26,7 @@ def _add_arguments(parser):
     """Add arguments to a parser object."""
     parser.add_argument(
         '--org-id',
-        help='CircleCI organization ID (or set ORG_ID env var)'
+        help='CircleCI organization ID (or set CIRCLE_ORGANIZATION_ID or ORG_ID)'
     )
     parser.add_argument(
         '--start-date',
@@ -40,7 +40,7 @@ def _add_arguments(parser):
     )
     parser.add_argument(
         '--api-token',
-        help='CircleCI API token (or set CIRCLECI_API_TOKEN env var)'
+        help='CircleCI API token (or set CIRCLECI_API_TOKEN, CIRCLE_TOKEN, or CIRCLECI_TOKEN)'
     )
     parser.add_argument(
         '--output',
@@ -59,14 +59,41 @@ def add_parser(subparsers):
     return _add_arguments(parser)
 
 
+def resolve_api_token(cli_token=None):
+    """Resolve a CircleCI API token from CLI or environment."""
+    return (
+        cli_token
+        or os.getenv('CIRCLECI_API_TOKEN')
+        or os.getenv('CIRCLE_TOKEN')
+        or os.getenv('CIRCLECI_TOKEN')
+    )
+
+
+def resolve_org_id(cli_org_id=None):
+    """Resolve an organization ID from CLI or environment."""
+    return (
+        cli_org_id
+        or os.getenv('CIRCLE_ORGANIZATION_ID')
+        or os.getenv('ORG_ID')
+    )
+
+
 def _validate_args(org_id, api_token, start_date, end_date):
     """Validate required arguments."""
     if not api_token:
-        print("Error: CircleCI API token required. Use --api-token or set CIRCLECI_API_TOKEN or CIRCLECI_TOKEN env var", file=sys.stderr)
+        print(
+            "Error: CircleCI API token required. Use --api-token or set "
+            "CIRCLECI_API_TOKEN, CIRCLE_TOKEN, or CIRCLECI_TOKEN",
+            file=sys.stderr,
+        )
         return False
 
     if not org_id:
-        print("Error: Organization ID required. Use --org-id or set ORG_ID env var", file=sys.stderr)
+        print(
+            "Error: Organization ID required. Use --org-id or set "
+            "CIRCLE_ORGANIZATION_ID or ORG_ID",
+            file=sys.stderr,
+        )
         return False
 
     if not start_date:
@@ -95,6 +122,15 @@ def _request_report(org_id, api_token, start_date, end_date):
         headers={"Circle-Token": api_token, "Content-Type": "application/json"},
         data=json.dumps(post_data)
     )
+
+    if response.status_code == 429:
+        print(
+            "Error: Usage API rate limit reached "
+            "(10 export requests per hour per organization). "
+            "Wait before requesting another export.",
+            file=sys.stderr,
+        )
+        return None
 
     if response.status_code != 201:
         print(f"Error: Failed to request report. Status: {response.status_code}", file=sys.stderr)
@@ -154,13 +190,14 @@ def _download_csv_files(download_urls, temp_dir):
         print(f"File {idx} downloaded and extracted")
 
 
-def _merge_csv_files(temp_dir, final_output):
+def _merge_csv_files(temp_dir, final_output, quiet=False):
     """Merge CSV files using the existing merge functionality."""
     merge_args = argparse.Namespace(
         input_dir=temp_dir,
-        output=final_output
+        output=final_output,
+        quiet=quiet,
     )
-    
+
     return merge_handle(merge_args)
 
 
@@ -178,44 +215,25 @@ def _calculate_wait_time(attempt, base_delay=BASE_DELAY, max_wait_time=MAX_WAIT_
     return min(base_delay * (2 ** (attempt - 1)), max_wait_time)
 
 
-def handle(args):
-    """Execute the get command."""
-    # Get org_id from CLI arg or environment variable
-    org_id = args.org_id or os.getenv('ORG_ID')
-    
-    # Get API token from CLI arg or environment variables
-    api_token = args.api_token or os.getenv('CIRCLECI_API_TOKEN') or os.getenv('CIRCLECI_TOKEN')
-    
-    # Get dates from CLI args (required)
-    start_date = args.start_date
-    end_date = args.end_date
-    
-    # Get output from CLI arg (has default)
-    output = args.output
+def export_usage_report(org_id, api_token, start_date, end_date, output, quiet=False):
+    """Request, poll, download, and merge a usage report into output.
 
-    # Validate arguments
-    if not _validate_args(org_id, api_token, start_date, end_date):
-        return 1
-
-    # Request the report
+    Returns 0 on success, 1 on failure. When quiet=True, file paths are not printed.
+    """
     report_id = _request_report(org_id, api_token, start_date, end_date)
     if not report_id:
         return 1
 
-    # Determine output paths
-    output_dir, final_output = _determine_output_path(output)
-    
-    # Create temporary directory for intermediate CSV files
+    _, final_output = _determine_output_path(output)
     temp_dir = _create_temp_directory()
-    
+
     try:
-        # Poll for report completion with exponential backoff
         attempt = 0
-        
+
         while True:
             attempt += 1
             print(f"Checking if report can be downloaded (attempt {attempt})...")
-            
+
             report = _get_report_status(org_id, api_token, report_id)
             report_status = report.get("state")
 
@@ -223,14 +241,12 @@ def handle(args):
                 print("Report generated. Now Downloading...")
                 download_urls = report.get("download_urls", [])
 
-                # Download all CSV files to temporary directory
                 _download_csv_files(download_urls, temp_dir)
 
-                # Merge all CSV files into one
-                merge_result = _merge_csv_files(temp_dir, final_output)
+                merge_result = _merge_csv_files(temp_dir, final_output, quiet=quiet)
                 if merge_result != 0:
                     return merge_result
-                
+
                 return 0
             elif report_status == "processing":
                 wait_time = _calculate_wait_time(attempt)
@@ -240,10 +256,24 @@ def handle(args):
                 print(f"Report status: {report_status}. Error occurred.", file=sys.stderr)
                 return 1
     finally:
-        # Clean up temporary directory
         if os.path.exists(temp_dir):
-            print(f"Cleaning up temporary directory: {temp_dir}")
+            if not quiet:
+                print(f"Cleaning up temporary directory: {temp_dir}")
             shutil.rmtree(temp_dir)
+
+
+def handle(args):
+    """Execute the get command."""
+    org_id = resolve_org_id(args.org_id)
+    api_token = resolve_api_token(args.api_token)
+    start_date = args.start_date
+    end_date = args.end_date
+    output = args.output
+
+    if not _validate_args(org_id, api_token, start_date, end_date):
+        return 1
+
+    return export_usage_report(org_id, api_token, start_date, end_date, output)
 
 
 def main():

@@ -36,6 +36,10 @@ Examples:
 
   # Store weekly metrics in Postgres + Prometheus
   circleci-usage-reporter store-metrics merged.csv --previous-week --database-url $DATABASE_URL
+
+  # Rank top workflows or jobs for a project (last 30 days)
+  circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
+  circleci-usage-reporter top-jobs --project-id "$CIRCLE_PROJECT_ID"
         """
     )
 
@@ -50,6 +54,7 @@ Examples:
     from src.create_graph import add_parser as add_create_graph_parser
     from src.run_analysis import add_parser as add_run_analysis_parser
     from src.store_metrics import add_parser as add_store_metrics_parser
+    from src.top import add_parser as add_top_parser
 
     # Register all command parsers
     add_get_parser(subparsers)
@@ -59,6 +64,7 @@ Examples:
     add_create_graph_parser(subparsers)
     add_run_analysis_parser(subparsers)
     add_store_metrics_parser(subparsers)
+    add_top_parser(subparsers)
 
     return parser
 
@@ -76,6 +82,7 @@ def main():
     from src.create_graph import handle as handle_create_graph
     from src.run_analysis import handle as handle_run_analysis
     from src.store_metrics import handle as handle_store_metrics
+    from src.top import handle as handle_top
 
     command_handlers = {
         'get': handle_get,
@@ -85,6 +92,8 @@ def main():
         'merge': handle_merge,
         'run-analysis': handle_run_analysis,
         'store-metrics': handle_store_metrics,
+        'top-workflows': handle_top,
+        'top-jobs': handle_top,
     }
 
     handler = command_handlers.get(args.command)

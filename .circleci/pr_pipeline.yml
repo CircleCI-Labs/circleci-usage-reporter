@@ -1,4 +1,7 @@
 # This config file outlines the pipeline that will run when a PR has been opened.
+# Unit tests and CLI smoke tests only. Do not add a live Usage API export here —
+# that endpoint is limited to 10 requests/hour/org. Live top-workflows/top-jobs
+# run on the weekly schedule in .circleci/config.yml.
 
 version: 2.1
 
@@ -55,6 +58,8 @@ jobs:
             circleci-usage-reporter create-graph --help
             circleci-usage-reporter run-analysis --help
             circleci-usage-reporter store-metrics --help
+            circleci-usage-reporter top-workflows --help
+            circleci-usage-reporter top-jobs --help
       - run:
           name: Verify standalone module entrypoints
           command: |
@@ -79,6 +84,8 @@ jobs:
           command: |
             docker run --rm usage-reporter get --help
             docker run --rm usage-reporter merge --help
+            docker run --rm usage-reporter top-workflows --help
+            docker run --rm usage-reporter top-jobs --help
 
 workflows:
   testing:

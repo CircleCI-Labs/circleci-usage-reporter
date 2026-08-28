@@ -24,6 +24,7 @@ class TestCLI:
         assert commands == {
             'get', 'merge', 'send-to-datadog', 'send-to-doit',
             'create-graph', 'run-analysis', 'store-metrics',
+            'top-workflows', 'top-jobs',
         }
 
     def test_unknown_command_exits_nonzero(self):
@@ -150,6 +151,29 @@ class TestGet:
         mock_post.return_value.text = 'Forbidden'
 
         assert _request_report('org', 'token', '2024-01-01', '2024-01-31') is None
+
+    @patch('src.get.requests.post')
+    def test_request_report_prints_human_rate_limit_message(self, mock_post, capsys):
+        from src.get import _request_report
+        mock_post.return_value.status_code = 429
+        mock_post.return_value.text = 'Rate limit exceeded'
+
+        assert _request_report('org', 'token', '2024-01-01', '2024-01-31') is None
+        err = capsys.readouterr().err
+        assert '10 export requests per hour' in err
+
+    def test_resolve_api_token_reads_circle_token(self, monkeypatch):
+        from src.get import resolve_api_token
+        monkeypatch.delenv('CIRCLECI_API_TOKEN', raising=False)
+        monkeypatch.delenv('CIRCLECI_TOKEN', raising=False)
+        monkeypatch.setenv('CIRCLE_TOKEN', 'from-circle-token')
+        assert resolve_api_token(None) == 'from-circle-token'
+
+    def test_resolve_org_id_reads_circle_organization_id(self, monkeypatch):
+        from src.get import resolve_org_id
+        monkeypatch.delenv('ORG_ID', raising=False)
+        monkeypatch.setenv('CIRCLE_ORGANIZATION_ID', 'from-circle-org')
+        assert resolve_org_id(None) == 'from-circle-org'
 
 
 class TestStandaloneEntrypoints:

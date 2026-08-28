@@ -229,6 +229,21 @@ jobs:
               --previous-week \
               --replace
 
+  # Live Usage API export is rate-limited to 10 POSTs/hour/org.
+  # Do not run top-workflows/top-jobs on every PR or commit — that burns quota.
+  # PR pipelines run unit tests only; this weekly job is the live check.
+  weekly-top-usage:
+    executor: python-small
+    no_output_timeout: 3m
+    steps:
+      - checkout
+      - install-requirements
+      - run:
+          name: Rank top workflows and jobs
+          command: |
+            circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
+            circleci-usage-reporter top-jobs --project-id "$CIRCLE_PROJECT_ID"
+
 workflows:
   use-usage-api:
     jobs:
@@ -266,3 +281,6 @@ workflows:
       - weekly-store-metrics:
           context:
             - my-context
+      - weekly-top-usage:
+          context:
+            - circle-token-cci-labs
