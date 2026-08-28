@@ -1,0 +1,79 @@
+version: 2.1
+
+description: >
+  Apply the weekly CircleCI schedule trigger (Terraform) and set previous-month
+  START_DATE / END_DATE for Usage API jobs.
+
+commands:
+  set-previous-month-dates:
+    description: >
+      Write previous calendar-month START_DATE and END_DATE into $BASH_ENV
+      using the job's current system time (GNU date on cimg Linux).
+    steps:
+      - run:
+          name: Set previous calendar month dates
+          command: |
+            START_DATE=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-01)
+            END_DATE=$(date -d "$(date +%Y-%m-01) -1 day" +%Y-%m-%d)
+            echo "export START_DATE=${START_DATE}" >> "$BASH_ENV"
+            echo "export END_DATE=${END_DATE}" >> "$BASH_ENV"
+            echo "Previous month window: ${START_DATE} to ${END_DATE}"
+
+  install-terraform:
+    description: Install Terraform for linux/amd64
+    parameters:
+      version:
+        type: string
+        default: "1.11.4"
+    steps:
+      - run:
+          name: Install Terraform << parameters.version >>
+          command: |
+            curl -fsSL \
+              "https://releases.hashicorp.com/terraform/<< parameters.version >>/terraform_<< parameters.version >>_linux_amd64.zip" \
+              -o /tmp/terraform.zip
+            sudo unzip -o /tmp/terraform.zip -d /usr/local/bin
+            terraform version
+
+jobs:
+  apply:
+    description: >
+      terraform apply the weekly schedule trigger. Auth is CIRCLE_TOKEN
+      (context circle-token-cci-labs). Does not run unless the parent
+      workflow is parameter-gated.
+    docker:
+      - image: cimg/base:current
+    resource_class: small.gen2
+    parameters:
+      terraform-dir:
+        type: string
+        default: terraform/weekly-schedule
+        description: Path to the Terraform module
+      pipeline-id:
+        type: string
+        default: ""
+        description: Pipeline definition UUID (or set TF_VAR_pipeline_id)
+    steps:
+      - checkout
+      - install-terraform
+      - run:
+          name: Terraform apply weekly schedule trigger
+          command: |
+            set -euo pipefail
+            if [ -z "${CIRCLE_TOKEN:-}" ]; then
+              echo "CIRCLE_TOKEN is required (use context circle-token-cci-labs)"
+              exit 1
+            fi
+            PIPELINE_ID="<< parameters.pipeline-id >>"
+            if [ -z "${PIPELINE_ID}" ]; then
+              PIPELINE_ID="${TF_VAR_pipeline_id:-}"
+            fi
+            if [ -z "${PIPELINE_ID}" ]; then
+              echo "Set job parameter pipeline-id or TF_VAR_pipeline_id (Project Settings → pipeline definition UUID)"
+              exit 1
+            fi
+            cd "<< parameters.terraform-dir >>"
+            terraform init -input=false
+            terraform apply -input=false -auto-approve \
+              -var="project_id=${CIRCLE_PROJECT_ID}" \
+              -var="pipeline_id=${PIPELINE_ID}"

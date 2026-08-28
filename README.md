@@ -166,7 +166,7 @@ See [`examples/doit/`](examples/doit/README.md) for full setup instructions.
 
 ### `store-metrics` — Store data in Postgres + Prometheus
 
-Loads a usage CSV into Postgres (`circleci_usage` table) and pushes weekly aggregate metrics to Prometheus Pushgateway. Designed for weekly scheduled runs to build historical trends in Grafana.
+Loads a usage CSV into Postgres (`circleci_usage` table) and pushes weekly aggregate metrics to Prometheus Pushgateway. Designed for weekly schedule-trigger runs (`terraform/weekly-schedule/`; `get` in CI uses the previous calendar month).
 
 ```bash
 circleci-usage-reporter store-metrics usage_report.csv \

@@ -1,15 +1,25 @@
-# This config file outlines the pipeline that will run when a PR has been opened.
 # Unit tests and CLI smoke tests only. Do not add a live Usage API export here —
 # that endpoint is limited to 10 requests/hour/org. Live top-workflows/top-jobs
-# run on the weekly schedule in .circleci/config.yml.
+# run on the weekly schedule trigger in .circleci/config.yml.
 
 version: 2.1
+
+parameters:
+  python-image:
+    type: string
+    default: cimg/python:3.13.1
+  run-weekly-usage:
+    type: boolean
+    default: false
+  apply-schedule:
+    type: boolean
+    default: false
 
 jobs:
   lint-and-test:
     docker:
-      - image: cimg/python:3.13.5
-    resource_class: small
+      - image: << pipeline.parameters.python-image >>
+    resource_class: small.gen2
     steps:
       - checkout
       - run:
@@ -38,8 +48,8 @@ jobs:
 
   cli-smoke-test:
     docker:
-      - image: cimg/python:3.13.5
-    resource_class: small
+      - image: << pipeline.parameters.python-image >>
+    resource_class: small.gen2
     steps:
       - checkout
       - run:
@@ -69,6 +79,7 @@ jobs:
   build-docker-image:
     docker:
       - image: cimg/base:2023.04
+    resource_class: small.gen2
     steps:
       - checkout
       - setup_remote_docker:
@@ -89,6 +100,7 @@ jobs:
 
 workflows:
   testing:
+    when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
     jobs:
       - lint-and-test
       - cli-smoke-test

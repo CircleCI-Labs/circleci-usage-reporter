@@ -1,5 +1,10 @@
 version: 2.1
 
+# URL orb (config reference: orbs.<name> is an https string, not a url: map).
+# Org must allow-list https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/
+orbs:
+  tf-schedule: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/tf-schedule.yml
+
 parameters:
   org_id:
     type: string
@@ -10,16 +15,28 @@ parameters:
   job_name:
     type: string
     default: "unit_tests"
+  python-image:
+    type: string
+    default: cimg/python:3.13.1
+  run-weekly-usage:
+    type: boolean
+    default: false
+  apply-schedule:
+    type: boolean
+    default: false
+  pipeline-definition-id:
+    type: string
+    default: ""
 
 executors:
   python-small:
     docker:
-      - image: cimg/python:3.13.1
-    resource_class: small
+      - image: << pipeline.parameters.python-image >>
+    resource_class: small.gen2
   python-large:
     docker:
-      - image: cimg/python:3.13.1
-    resource_class: large
+      - image: << pipeline.parameters.python-image >>
+    resource_class: large.gen2
 
 commands:
   install-requirements:
@@ -38,7 +55,7 @@ commands:
           key: pip-deps-v1-{{ checksum "requirements.txt" }}
           paths:
             - ~/.local/lib/python3.13/site-packages
-  
+
   install-all-deps:
     description: "Install all dependencies (requirements + analysis) with caching"
     steps:
@@ -59,7 +76,7 @@ commands:
           key: system-deps-v1-{{ checksum "requirements.txt" }}-jupyter
           paths:
             - /usr/local/lib/python3.13/dist-packages
-  
+
   verify-merged-data:
     description: "Verify merged data file exists"
     steps:
@@ -68,7 +85,7 @@ commands:
           command: |
             ls -la /tmp/merged.csv
             echo "Using merged file directly from workspace at /tmp/merged.csv"
-  
+
   run-analysis:
     description: "Run analysis script with parameters"
     parameters:
@@ -85,15 +102,65 @@ commands:
             fi
 
 jobs:
-  generate-usage-report:
+  lint-and-test:
     executor: python-small
     steps:
       - checkout
+      - run:
+          name: Install dependencies
+          command: pip install -e . && pip install pytest pytest-cov flake8
+      - run:
+          name: Linting
+          command: make lint
+      - run:
+          name: Testing with coverage
+          environment:
+            MPLBACKEND: Agg
+          command: |
+            mkdir -p test-results
+            python -m pytest tests/ -v \
+              --cov=src \
+              --cov-report=xml:test-results/coverage.xml \
+              --cov-report=html:test-results/coverage-html \
+              --cov-fail-under=50 \
+              --junitxml=test-results/junit.xml
+      - store_test_results:
+          path: test-results/junit.xml
+      - store_artifacts:
+          path: test-results/coverage-html/index.html
+          destination: coverage-report/index.html
+
+  cli-smoke-test:
+    executor: python-small
+    steps:
+      - checkout
+      - run:
+          name: Install package
+          command: pip install -e .
+      - run:
+          name: Verify CLI entry point
+          command: circleci-usage-reporter --help
+      - run:
+          name: Verify all subcommands respond to --help
+          command: |
+            circleci-usage-reporter get --help
+            circleci-usage-reporter merge --help
+            circleci-usage-reporter send-to-datadog --help
+            circleci-usage-reporter send-to-doit --help
+            circleci-usage-reporter create-graph --help
+            circleci-usage-reporter run-analysis --help
+            circleci-usage-reporter store-metrics --help
+            circleci-usage-reporter top-workflows --help
+            circleci-usage-reporter top-jobs --help
+
+  generate-usage-report:
+    executor: python-large
+    steps:
+      - checkout
       - install-requirements
+      - tf-schedule/set-previous-month-dates
       - run:
           environment:
-            START_DATE: "2026-01-01"
-            END_DATE: "2026-02-01"
             ORG_ID: << pipeline.parameters.org_id >>
           name: Get Usage Report
           command: |
@@ -109,7 +176,7 @@ jobs:
             - merged.csv
       - store_artifacts:
           path: /tmp/reports
-  
+
   send-metrics-to-datadog:
     executor: python-small
     steps:
@@ -187,9 +254,7 @@ jobs:
           path: /tmp/reports
 
   send-metrics-to-doit:
-    docker:
-      - image: cimg/python:3.13.1
-    resource_class: small
+    executor: python-small
     steps:
       - checkout
       - attach_workspace:
@@ -205,7 +270,7 @@ jobs:
             circleci-usage-reporter send-to-doit /tmp/merged.csv
 
   weekly-store-metrics:
-    executor: python-small
+    executor: python-large
     steps:
       - checkout
       - install-requirements
@@ -230,22 +295,27 @@ jobs:
               --replace
 
   # Live Usage API export is rate-limited to 10 POSTs/hour/org.
-  # Do not run top-workflows/top-jobs on every PR or commit — that burns quota.
-  # PR pipelines run unit tests only; this weekly job is the live check.
   weekly-top-usage:
-    executor: python-small
-    no_output_timeout: 3m
+    executor: python-large
     steps:
       - checkout
       - install-requirements
       - run:
           name: Rank top workflows and jobs
+          no_output_timeout: 3m
           command: |
             circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
             circleci-usage-reporter top-jobs --project-id "$CIRCLE_PROJECT_ID"
 
 workflows:
-  use-usage-api:
+  test:
+    when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
+    jobs:
+      - lint-and-test
+      - cli-smoke-test
+
+  weekly-usage:
+    when: pipeline.parameters.run-weekly-usage
     jobs:
       - generate-usage-report:
           context:
@@ -268,19 +338,17 @@ workflows:
             - generate-project-analysis: terminal
             - generate-compute-credits-analysis: terminal
             - generate-resource-class-analysis: terminal
-
-  weekly-usage-report:
-    triggers:
-      - schedule:
-          cron: "0 9 * * 1"
-          filters:
-            branches:
-              only:
-                - main
-    jobs:
       - weekly-store-metrics:
           context:
             - my-context
       - weekly-top-usage:
           context:
             - circle-token-cci-labs
+
+  apply-tf-schedule:
+    when: pipeline.parameters.apply-schedule
+    jobs:
+      - tf-schedule/apply:
+          context:
+            - circle-token-cci-labs
+          pipeline-id: << pipeline.parameters.pipeline-definition-id >>
