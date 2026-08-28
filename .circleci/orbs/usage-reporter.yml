@@ -1,0 +1,542 @@
+version: 2.1
+
+# URL orb: pipeline parameters are not in scope here. Image / resource-class
+# defaults live on executors; callers pass << pipeline.parameters.python-image >>
+# at each job or executor invocation.
+
+description: >
+  Nested commands, gen2 executors, and shared jobs for this repo's test,
+  weekly-usage, Docker, and Terraform schedule-trigger pipelines.
+
+executors:
+  python-small:
+    description: Light Python jobs (lint, CLI help, attach/store).
+    parameters:
+      image: &python-image-param
+        type: string
+        default: cimg/python:3.13.1
+    docker:
+      - image: << parameters.image >>
+    resource_class: small.gen2
+
+  python-large:
+    description: Heavier Python jobs (usage export, analysis, top-N).
+    parameters:
+      image: *python-image-param
+    docker:
+      - image: << parameters.image >>
+    resource_class: large.gen2
+
+  linux-small:
+    description: Light Linux jobs (Terraform apply).
+    parameters:
+      image: &linux-image-param
+        type: string
+        default: cimg/base:current
+    docker:
+      - image: << parameters.image >>
+    resource_class: small.gen2
+
+  linux-medium:
+    description: Remote Docker (small.gen2 cannot run setup_remote_docker).
+    parameters:
+      image: *linux-image-param
+    docker:
+      - image: << parameters.image >>
+    resource_class: medium.gen2
+
+commands:
+  # --- low-level ----------------------------------------------------------
+  set-previous-month-dates:
+    description: >
+      Write previous calendar-month START_DATE and END_DATE into $BASH_ENV
+      (GNU date on cimg Linux).
+    steps:
+      - run:
+          name: Set previous calendar month dates
+          command: |
+            START_DATE=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m-01)
+            END_DATE=$(date -d "$(date +%Y-%m-01) -1 day" +%Y-%m-%d)
+            echo "export START_DATE=${START_DATE}" >> "$BASH_ENV"
+            echo "export END_DATE=${END_DATE}" >> "$BASH_ENV"
+            echo "Previous month window: ${START_DATE} to ${END_DATE}"
+
+  set-previous-week-dates:
+    description: Write previous-week START_DATE and END_DATE into $BASH_ENV.
+    steps:
+      - run:
+          name: Set previous week dates
+          command: |
+            START_DATE="$(date -u -d 'last monday - 7 days' +%Y-%m-%d)"
+            END_DATE="$(date -u -d 'last monday' +%Y-%m-%d)"
+            echo "export START_DATE=${START_DATE}" >> "$BASH_ENV"
+            echo "export END_DATE=${END_DATE}" >> "$BASH_ENV"
+            echo "Previous week window: ${START_DATE} to ${END_DATE}"
+
+  resolve-org-id:
+    description: Expand ORG_ID through circleci env subst into $BASH_ENV.
+    parameters:
+      org-id:
+        type: string
+        default: ${CIRCLE_ORGANIZATION_ID}
+    steps:
+      - run:
+          name: Resolve organization ID
+          environment:
+            ORG_ID: << parameters.org-id >>
+          command: |
+            ORG_ID="$(echo "${ORG_ID}" | circleci env subst)"
+            echo "export ORG_ID=${ORG_ID}" >> "$BASH_ENV"
+
+  install-package:
+    description: "Install this repo editable (pip install -e .)."
+    steps:
+      - run:
+          name: Install package
+          command: pip install -e .
+
+  install-python-deps:
+    description: Install requirements.txt and the package (editable).
+    parameters:
+      pip:
+        type: string
+        default: pip
+      user-flag:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Install Python dependencies
+          command: |
+            << parameters.pip >> install << parameters.user-flag >> -r requirements.txt
+            << parameters.pip >> install << parameters.user-flag >> -e .
+
+  install-test-deps:
+    description: Editable install plus pytest, pytest-cov, flake8.
+    steps:
+      - install-package
+      - run:
+          name: Install test dependencies
+          command: pip install pytest pytest-cov flake8
+
+  install-jupyter:
+    description: Install Jupyter and nbconvert for analysis notebooks.
+    steps:
+      - run:
+          name: Install Jupyter
+          command: pip3 install jupyter nbconvert
+
+  install-requirements:
+    description: Cached requirements.txt + editable install (pip --user).
+    steps:
+      - restore_cache:
+          keys:
+            - pip-deps-v1-{{ checksum "requirements.txt" }}
+            - pip-deps-v1-
+      - install-python-deps:
+          pip: pip
+          user-flag: --user
+      - save_cache:
+          key: pip-deps-v1-{{ checksum "requirements.txt" }}
+          paths:
+            - ~/.local/lib/python3.13/site-packages
+
+  install-analysis-deps:
+    description: Cached requirements + editable + Jupyter (pip3).
+    steps:
+      - restore_cache:
+          keys:
+            - system-deps-v1-{{ checksum "requirements.txt" }}-jupyter
+            - system-deps-v1-
+      - install-python-deps:
+          pip: pip3
+      - install-jupyter
+      - save_cache:
+          key: system-deps-v1-{{ checksum "requirements.txt" }}-jupyter
+          paths:
+            - /usr/local/lib/python3.13/dist-packages
+
+  run-lint:
+    description: flake8 via Makefile.
+    steps:
+      - run:
+          name: Linting
+          command: make lint
+
+  run-unit-tests:
+    description: pytest with coverage (no live Usage API).
+    steps:
+      - run:
+          name: Testing with coverage
+          environment:
+            MPLBACKEND: Agg
+          command: |
+            mkdir -p test-results
+            python -m pytest tests/ -v \
+              --cov=src \
+              --cov-report=xml:test-results/coverage.xml \
+              --cov-report=html:test-results/coverage-html \
+              --cov-fail-under=50 \
+              --junitxml=test-results/junit.xml
+      - store_test_results:
+          path: test-results/junit.xml
+      - store_artifacts:
+          path: test-results/coverage-html/index.html
+          destination: coverage-report/index.html
+
+  run-cli-help:
+    description: "--help for the CLI and every subcommand (no live API)."
+    parameters:
+      bin:
+        type: string
+        default: circleci-usage-reporter
+    steps:
+      - run:
+          name: Verify CLI entry point
+          command: << parameters.bin >> --help
+      - run:
+          name: Verify all subcommands respond to --help
+          command: |
+            << parameters.bin >> get --help
+            << parameters.bin >> merge --help
+            << parameters.bin >> send-to-datadog --help
+            << parameters.bin >> send-to-doit --help
+            << parameters.bin >> create-graph --help
+            << parameters.bin >> run-analysis --help
+            << parameters.bin >> store-metrics --help
+            << parameters.bin >> top-workflows --help
+            << parameters.bin >> top-jobs --help
+
+  run-module-help:
+    description: "--help for standalone module entrypoints."
+    steps:
+      - run:
+          name: Verify standalone module entrypoints
+          command: |
+            python -m src.merge --help
+            python -m src.create_graph --help
+
+  run-top-workflows:
+    description: Rank top workflows (live Usage API; share a job with top-jobs).
+    steps:
+      - run:
+          name: Rank top workflows
+          no_output_timeout: 3m
+          command: circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
+
+  run-top-jobs:
+    description: Rank top jobs (live Usage API; share a job with top-workflows).
+    steps:
+      - run:
+          name: Rank top jobs
+          no_output_timeout: 3m
+          command: circleci-usage-reporter top-jobs --project-id "$CIRCLE_PROJECT_ID"
+
+  run-get-usage:
+    description: Usage API get using ORG_ID / START_DATE / END_DATE from the environment.
+    parameters:
+      output:
+        type: string
+        default: /tmp/reports/merged.csv
+    steps:
+      - run:
+          name: Get usage report
+          command: >
+            circleci-usage-reporter get
+            --org-id "$ORG_ID"
+            --start-date "$START_DATE"
+            --end-date "$END_DATE"
+            --output << parameters.output >>
+
+  run-create-graph:
+    description: Credits graph from the merged usage CSV.
+    parameters:
+      input:
+        type: string
+        default: /tmp/reports/merged.csv
+    steps:
+      - run:
+          name: Create a graph from the merged data
+          command: circleci-usage-reporter create-graph << parameters.input >>
+
+  run-store-metrics:
+    description: Load usage CSV into Postgres / Prometheus (previous week).
+    parameters:
+      input:
+        type: string
+        default: /tmp/reports/merged.csv
+    steps:
+      - run:
+          name: Store metrics in Postgres and Prometheus
+          command: |
+            circleci-usage-reporter store-metrics << parameters.input >> \
+              --previous-week \
+              --replace
+
+  verify-merged-data:
+    description: Confirm workspace merged.csv is present.
+    steps:
+      - run:
+          name: Verify merged data file exists
+          command: |
+            ls -la /tmp/merged.csv
+            echo "Using merged file directly from workspace at /tmp/merged.csv"
+
+  run-analysis:
+    description: Jupyter analysis report (job-name / cost passed in; no pipeline params).
+    parameters:
+      analysis-type:
+        type: string
+      job-name:
+        type: string
+        default: ""
+      cost-per-credit:
+        type: string
+        default: "0.0006"
+    steps:
+      - run:
+          name: Execute << parameters.analysis-type >> analysis
+          command: |
+            if [ "<< parameters.job-name >>" != "" ]; then
+              circleci-usage-reporter run-analysis --type << parameters.analysis-type >> --job << parameters.job-name >> --credit-cost << parameters.cost-per-credit >> --input /tmp/merged.csv
+            else
+              circleci-usage-reporter run-analysis --type << parameters.analysis-type >> --credit-cost << parameters.cost-per-credit >> --input /tmp/merged.csv
+            fi
+
+  start-remote-docker:
+    description: Remote Docker engine (caller must use linux-medium / medium.gen2).
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+  run-docker-build:
+    description: Build the usage-reporter image.
+    parameters:
+      tag:
+        type: string
+        default: usage-reporter:latest
+    steps:
+      - run:
+          name: Build docker image
+          command: docker build . -t << parameters.tag >>
+
+  install-terraform:
+    description: Install Terraform for linux/amd64.
+    parameters:
+      version:
+        type: string
+        default: "1.11.4"
+    steps:
+      - run:
+          name: Install Terraform << parameters.version >>
+          command: |
+            curl -fsSL \
+              "https://releases.hashicorp.com/terraform/<< parameters.version >>/terraform_<< parameters.version >>_linux_amd64.zip" \
+              -o /tmp/terraform.zip
+            sudo unzip -o /tmp/terraform.zip -d /usr/local/bin
+            terraform version
+
+  terraform-init-apply:
+    description: terraform init/apply; project_id from CIRCLE_PROJECT_ID, pipeline_id from param or TF_VAR.
+    parameters:
+      terraform-dir:
+        type: string
+        default: terraform/weekly-schedule
+      pipeline-id:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Terraform apply weekly schedule trigger
+          command: |
+            set -euo pipefail
+            if [ -z "${CIRCLE_TOKEN:-}" ]; then
+              echo "CIRCLE_TOKEN is required (use context circle-token-cci-labs)"
+              exit 1
+            fi
+            PIPELINE_ID="<< parameters.pipeline-id >>"
+            if [ -z "${PIPELINE_ID}" ]; then
+              PIPELINE_ID="${TF_VAR_pipeline_id:-}"
+            fi
+            if [ -z "${PIPELINE_ID}" ]; then
+              echo "Set job parameter pipeline-id or TF_VAR_pipeline_id (Project Settings → pipeline definition UUID)"
+              exit 1
+            fi
+            cd "<< parameters.terraform-dir >>"
+            terraform init -input=false
+            terraform apply -input=false -auto-approve \
+              -var="project_id=${CIRCLE_PROJECT_ID}" \
+              -var="pipeline_id=${PIPELINE_ID}"
+
+  # --- mid-level (commands calling commands) ------------------------------
+  run-lint-and-test:
+    description: Install test deps, lint, and unit-test with coverage.
+    steps:
+      - install-test-deps
+      - run-lint
+      - run-unit-tests
+
+  verify-cli:
+    description: "Editable install plus CLI and module --help."
+    steps:
+      - install-package
+      - run-cli-help
+      - run-module-help
+
+  rank-top-usage:
+    description: Install deps, then top-workflows and top-jobs (one Usage export cache).
+    steps:
+      - install-requirements
+      - run-top-workflows
+      - run-top-jobs
+
+  get-previous-month-usage:
+    description: Previous-month dates, resolve org, then Usage get.
+    parameters:
+      org-id:
+        type: string
+        default: ${CIRCLE_ORGANIZATION_ID}
+      output:
+        type: string
+        default: /tmp/reports/merged.csv
+    steps:
+      - set-previous-month-dates
+      - resolve-org-id:
+          org-id: << parameters.org-id >>
+      - run-get-usage:
+          output: << parameters.output >>
+
+  get-previous-week-usage:
+    description: Previous-week dates, resolve org, then Usage get.
+    parameters:
+      org-id:
+        type: string
+        default: ${CIRCLE_ORGANIZATION_ID}
+      output:
+        type: string
+        default: /tmp/reports/merged.csv
+    steps:
+      - set-previous-week-dates
+      - resolve-org-id:
+          org-id: << parameters.org-id >>
+      - run-get-usage:
+          output: << parameters.output >>
+
+  run-analysis-report:
+    description: Analysis deps, verify CSV, run one analysis type.
+    parameters:
+      analysis-type:
+        type: string
+      job-name:
+        type: string
+        default: ""
+      cost-per-credit:
+        type: string
+        default: "0.0006"
+    steps:
+      - install-analysis-deps
+      - verify-merged-data
+      - run-analysis:
+          analysis-type: << parameters.analysis-type >>
+          job-name: << parameters.job-name >>
+          cost-per-credit: << parameters.cost-per-credit >>
+
+  build-and-verify-docker:
+    description: "Remote Docker, build image, --help inside the container."
+    steps:
+      - start-remote-docker
+      - run-docker-build
+      - run-cli-help:
+          bin: docker run --rm usage-reporter
+
+  apply-weekly-schedule:
+    description: Install Terraform, then init/apply the weekly schedule module.
+    parameters:
+      terraform-dir:
+        type: string
+        default: terraform/weekly-schedule
+      pipeline-id:
+        type: string
+        default: ""
+      terraform-version:
+        type: string
+        default: "1.11.4"
+    steps:
+      - install-terraform:
+          version: << parameters.terraform-version >>
+      - terraform-init-apply:
+          terraform-dir: << parameters.terraform-dir >>
+          pipeline-id: << parameters.pipeline-id >>
+
+jobs:
+  lint-and-test:
+    description: flake8 + pytest coverage (no live Usage API).
+    parameters:
+      python-image: *python-image-param
+    executor:
+      name: python-small
+      image: << parameters.python-image >>
+    steps:
+      - checkout
+      - run-lint-and-test
+
+  cli-smoke-test:
+    description: "CLI and module --help only."
+    parameters:
+      python-image: *python-image-param
+    executor:
+      name: python-small
+      image: << parameters.python-image >>
+    steps:
+      - checkout
+      - verify-cli
+
+  build-docker-image:
+    description: >
+      Build the image on remote Docker. Requires medium.gen2 (linux-medium);
+      small.gen2 cannot provision setup_remote_docker.
+    parameters:
+      image:
+        type: string
+        default: cimg/base:2023.04
+    executor:
+      name: linux-medium
+      image: << parameters.image >>
+    steps:
+      - checkout
+      - build-and-verify-docker
+
+  weekly-top-usage:
+    description: >
+      Live top-workflows / top-jobs in one job (one Usage export). Used on
+      the OAuth test workflow and weekly schedule. Attach context
+      circle-token-cci-labs at the workflow call site.
+    parameters:
+      python-image: *python-image-param
+    executor:
+      name: python-large
+      image: << parameters.python-image >>
+    steps:
+      - checkout
+      - rank-top-usage
+
+  apply-weekly-schedule:
+    description: >
+      terraform apply the weekly schedule trigger. Auth is CIRCLE_TOKEN
+      (context circle-token-cci-labs on the workflow job). Parent workflow
+      must be parameter-gated.
+    parameters:
+      terraform-dir:
+        type: string
+        default: terraform/weekly-schedule
+        description: Path to the Terraform module
+      pipeline-id:
+        type: string
+        default: ""
+        description: Pipeline definition UUID (or set TF_VAR_pipeline_id)
+    executor: linux-small
+    steps:
+      - checkout
+      - apply-weekly-schedule:
+          terraform-dir: << parameters.terraform-dir >>
+          pipeline-id: << parameters.pipeline-id >>

@@ -112,6 +112,19 @@ circleci-usage-reporter get \
 
 ---
 
+### `top-workflows` / `top-jobs` — Rank a project's usage
+
+Prints a credits table for the last 30 days. Token: `$CIRCLECI_API_TOKEN`, `$CIRCLE_TOKEN`, or `$CIRCLECI_TOKEN`.
+
+```bash
+circleci-usage-reporter top-workflows --project-id "$CIRCLE_PROJECT_ID"
+circleci-usage-reporter top-jobs --project-id "$CIRCLE_PROJECT_ID"
+```
+
+Run both in the same job so they share one Usage export. The Usage API allows 10 exports per hour per org — do not run these commands frequently.
+
+---
+
 ### `merge` — Merge CSV files
 
 Merges multiple CSV files from a directory into a single file, deduplicating headers.
@@ -153,7 +166,7 @@ See [`examples/doit/`](examples/doit/README.md) for full setup instructions.
 
 ### `store-metrics` — Store data in Postgres + Prometheus
 
-Loads a usage CSV into Postgres (`circleci_usage` table) and pushes weekly aggregate metrics to Prometheus Pushgateway. Designed for weekly scheduled runs to build historical trends in Grafana.
+Loads a usage CSV into Postgres (`circleci_usage` table) and pushes weekly aggregate metrics to Prometheus Pushgateway. Designed for weekly schedule-trigger runs (`terraform/weekly-schedule/`; `get` in CI uses the previous calendar month).
 
 ```bash
 circleci-usage-reporter store-metrics usage_report.csv \
@@ -201,8 +214,9 @@ circleci-usage-reporter run-analysis \
 
 | Variable | Used by |
 |----------|---------|
-| `CIRCLECI_API_TOKEN` | `get` |
-| `ORG_ID` | `get` |
+| `CIRCLECI_API_TOKEN` / `CIRCLE_TOKEN` / `CIRCLECI_TOKEN` | `get`, `top-workflows`, `top-jobs` |
+| `ORG_ID` / `CIRCLE_ORGANIZATION_ID` | `get`, `top-workflows`, `top-jobs` |
+| `CIRCLE_PROJECT_ID` | `top-workflows`, `top-jobs` |
 | `DD_API_KEY` | `send-to-datadog` |
 | `DD_APP_KEY` | `send-to-datadog` |
 | `DOIT_API_KEY` | `send-to-doit` |

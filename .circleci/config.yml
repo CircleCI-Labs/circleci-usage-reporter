@@ -1,5 +1,11 @@
 version: 2.1
 
+# URL orb (config reference: orbs.<name> is an https string, not a url: map).
+# Org must allow-list https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/
+# Pipeline parameters are not visible inside the orb; pass python-image at each call.
+orbs:
+  usage-reporter: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/usage-reporter.yml
+
 parameters:
   org_id:
     type: string
@@ -10,175 +16,73 @@ parameters:
   job_name:
     type: string
     default: "unit_tests"
-
-executors:
-  python-small:
-    docker:
-      - image: cimg/python:3.13.1
-    resource_class: small
-  python-large:
-    docker:
-      - image: cimg/python:3.13.1
-    resource_class: large
-
-commands:
-  install-requirements:
-    description: "Install Python dependencies from requirements.txt with caching"
-    steps:
-      - restore_cache:
-          keys:
-            - pip-deps-v1-{{ checksum "requirements.txt" }}
-            - pip-deps-v1-
-      - run:
-          name: Install dependencies
-          command: |
-            pip install --user -r requirements.txt
-            pip install --user -e .
-      - save_cache:
-          key: pip-deps-v1-{{ checksum "requirements.txt" }}
-          paths:
-            - ~/.local/lib/python3.13/site-packages
-  
-  install-all-deps:
-    description: "Install all dependencies (requirements + analysis) with caching"
-    steps:
-      - restore_cache:
-          keys:
-            - system-deps-v1-{{ checksum "requirements.txt" }}-jupyter
-            - system-deps-v1-
-      - run:
-          name: Install Python dependencies
-          command: |
-            pip3 install -r requirements.txt
-            pip3 install -e .
-      - run:
-          name: Install Jupyter
-          command: |
-            pip3 install jupyter nbconvert
-      - save_cache:
-          key: system-deps-v1-{{ checksum "requirements.txt" }}-jupyter
-          paths:
-            - /usr/local/lib/python3.13/dist-packages
-  
-  verify-merged-data:
-    description: "Verify merged data file exists"
-    steps:
-      - run:
-          name: Verify merged data file exists
-          command: |
-            ls -la /tmp/merged.csv
-            echo "Using merged file directly from workspace at /tmp/merged.csv"
-  
-  run-analysis:
-    description: "Run analysis script with parameters"
-    parameters:
-      analysis_type:
-        type: string
-    steps:
-      - run:
-          name: Execute << parameters.analysis_type >> analysis
-          command: |
-            if [ "<< pipeline.parameters.job_name >>" != "" ]; then
-              circleci-usage-reporter run-analysis --type << parameters.analysis_type >> --job << pipeline.parameters.job_name >> --credit-cost << pipeline.parameters.cost_per_credit >> --input /tmp/merged.csv
-            else
-              circleci-usage-reporter run-analysis --type << parameters.analysis_type >> --credit-cost << pipeline.parameters.cost_per_credit >> --input /tmp/merged.csv
-            fi
+  python-image:
+    type: string
+    default: cimg/python:3.13.1
+  run-weekly-usage:
+    type: boolean
+    default: false
+  apply-schedule:
+    type: boolean
+    default: false
+  pipeline-definition-id:
+    type: string
+    default: ""
 
 jobs:
   generate-usage-report:
-    executor: python-small
+    executor:
+      name: usage-reporter/python-large
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
-      - install-requirements
-      - run:
-          environment:
-            START_DATE: "2026-01-01"
-            END_DATE: "2026-02-01"
-            ORG_ID: << pipeline.parameters.org_id >>
-          name: Get Usage Report
-          command: |
-            ORG_ID="$(echo "${ORG_ID}" | circleci env subst)"
-            circleci-usage-reporter get --org-id "$ORG_ID" --start-date "$START_DATE" --end-date "$END_DATE" --output /tmp/reports/merged.csv
-      - run:
-          name: Create a graph from the merged data
-          command: |
-            circleci-usage-reporter create-graph /tmp/reports/merged.csv
+      - usage-reporter/install-requirements
+      - usage-reporter/get-previous-month-usage:
+          org-id: << pipeline.parameters.org_id >>
+      - usage-reporter/run-create-graph
       - persist_to_workspace:
           root: /tmp/reports
           paths:
             - merged.csv
       - store_artifacts:
           path: /tmp/reports
-  
+
   send-metrics-to-datadog:
-    executor: python-small
+    executor:
+      name: usage-reporter/python-small
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - install-requirements
+      - usage-reporter/install-requirements
       - run:
           name: Send metrics to Datadog
           command: circleci-usage-reporter send-to-datadog /tmp/merged.csv
 
-  generate-job-analysis:
-    executor: python-large
+  generate-analysis:
+    parameters:
+      analysis-type:
+        type: string
+    executor:
+      name: usage-reporter/python-large
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - install-all-deps
-      - verify-merged-data
-      - run-analysis:
-          analysis_type: "job"
-      - persist_to_workspace:
-          root: /tmp
-          paths: reports
-
-  generate-project-analysis:
-    executor: python-large
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - install-all-deps
-      - verify-merged-data
-      - run-analysis:
-          analysis_type: "project"
-      - persist_to_workspace:
-          root: /tmp
-          paths: reports
-
-  generate-compute-credits-analysis:
-    executor: python-large
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - install-all-deps
-      - verify-merged-data
-      - run-analysis:
-          analysis_type: "compute-credits"
-      - persist_to_workspace:
-          root: /tmp
-          paths: reports
-
-  generate-resource-class-analysis:
-    executor: python-large
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - install-all-deps
-      - verify-merged-data
-      - run-analysis:
-          analysis_type: "resource"
+      - usage-reporter/run-analysis-report:
+          analysis-type: << parameters.analysis-type >>
+          job-name: << pipeline.parameters.job_name >>
+          cost-per-credit: << pipeline.parameters.cost_per_credit >>
       - persist_to_workspace:
           root: /tmp
           paths: reports
 
   gather-artifacts:
-    executor: python-small
+    executor:
+      name: usage-reporter/python-small
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
@@ -187,64 +91,69 @@ jobs:
           path: /tmp/reports
 
   send-metrics-to-doit:
-    docker:
-      - image: cimg/python:3.13.1
-    resource_class: small
+    executor:
+      name: usage-reporter/python-small
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - run:
-          name: Install dependencies
-          command: |
-            pip3 install -r requirements.txt
-            pip3 install -e .
+      - usage-reporter/install-python-deps:
+          pip: pip3
       - run:
           name: Send metrics to DoiT
-          command: |
-            circleci-usage-reporter send-to-doit /tmp/merged.csv
+          command: circleci-usage-reporter send-to-doit /tmp/merged.csv
 
   weekly-store-metrics:
-    executor: python-small
+    executor:
+      name: usage-reporter/python-large
+      image: << pipeline.parameters.python-image >>
     steps:
       - checkout
-      - install-requirements
-      - run:
-          name: Download previous week's usage report
-          environment:
-            ORG_ID: << pipeline.parameters.org_id >>
-          command: |
-            ORG_ID="$(echo "${ORG_ID}" | circleci env subst)"
-            START_DATE="$(date -u -d 'last monday - 7 days' +%Y-%m-%d)"
-            END_DATE="$(date -u -d 'last monday' +%Y-%m-%d)"
-            circleci-usage-reporter get \
-              --org-id "$ORG_ID" \
-              --start-date "$START_DATE" \
-              --end-date "$END_DATE" \
-              --output /tmp/reports/merged.csv
-      - run:
-          name: Store metrics in Postgres and Prometheus
-          command: |
-            circleci-usage-reporter store-metrics /tmp/reports/merged.csv \
-              --previous-week \
-              --replace
+      - usage-reporter/install-requirements
+      - usage-reporter/get-previous-week-usage:
+          org-id: << pipeline.parameters.org_id >>
+      - usage-reporter/run-store-metrics
 
 workflows:
-  use-usage-api:
+  test:
+    when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
+    jobs:
+      - usage-reporter/lint-and-test:
+          python-image: << pipeline.parameters.python-image >>
+      - usage-reporter/cli-smoke-test:
+          python-image: << pipeline.parameters.python-image >>
+      # Live top-N on OAuth so context circle-token-cci-labs (CIRCLE_TOKEN) resolves.
+      # Not on the GitHub App pipeline — that org has no such context.
+      - usage-reporter/weekly-top-usage:
+          context: &circle-token-cci-labs
+            - circle-token-cci-labs
+          python-image: << pipeline.parameters.python-image >>
+
+  weekly-usage:
+    when: pipeline.parameters.run-weekly-usage
     jobs:
       - generate-usage-report:
-          context:
+          context: &my-context
             - my-context
-      - generate-job-analysis:
+      - generate-analysis:
+          name: generate-job-analysis
+          analysis-type: job
           requires:
             - generate-usage-report
-      - generate-project-analysis:
+      - generate-analysis:
+          name: generate-project-analysis
+          analysis-type: project
           requires:
             - generate-usage-report
-      - generate-compute-credits-analysis:
+      - generate-analysis:
+          name: generate-compute-credits-analysis
+          analysis-type: compute-credits
           requires:
             - generate-usage-report
-      - generate-resource-class-analysis:
+      - generate-analysis:
+          name: generate-resource-class-analysis
+          analysis-type: resource
           requires:
             - generate-usage-report
       - gather-artifacts:
@@ -253,16 +162,15 @@ workflows:
             - generate-project-analysis: terminal
             - generate-compute-credits-analysis: terminal
             - generate-resource-class-analysis: terminal
-
-  weekly-usage-report:
-    triggers:
-      - schedule:
-          cron: "0 9 * * 1"
-          filters:
-            branches:
-              only:
-                - main
-    jobs:
       - weekly-store-metrics:
-          context:
-            - my-context
+          context: *my-context
+      - usage-reporter/weekly-top-usage:
+          context: *circle-token-cci-labs
+          python-image: << pipeline.parameters.python-image >>
+
+  apply-weekly-schedule:
+    when: pipeline.parameters.apply-schedule
+    jobs:
+      - usage-reporter/apply-weekly-schedule:
+          context: *circle-token-cci-labs
+          pipeline-id: << pipeline.parameters.pipeline-definition-id >>

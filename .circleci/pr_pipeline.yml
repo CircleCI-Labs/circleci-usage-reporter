@@ -1,88 +1,29 @@
-# This config file outlines the pipeline that will run when a PR has been opened.
+# Unit tests, CLI smoke, and Docker build only.
+# Live top-N (weekly-top-usage) runs on the OAuth config.yml test workflow
+# so context circle-token-cci-labs is available. Do not add a Usage export
+# job here — one export per hour-window (10/org).
+#
+# Shared jobs/commands live in the URL orb. python-image default is the orb
+# executor default (pipeline parameters are not visible inside URL orbs).
+# Boolean parameters exist only so this pipeline's when: matches config.yml.
 
 version: 2.1
 
-jobs:
-  lint-and-test:
-    docker:
-      - image: cimg/python:3.13.5
-    resource_class: small
-    steps:
-      - checkout
-      - run:
-          name: Install dependencies
-          command: pip install -e . && pip install pytest pytest-cov flake8
-      - run:
-          name: Linting
-          command: make lint
-      - run:
-          name: Testing with coverage
-          environment:
-            MPLBACKEND: Agg
-          command: |
-            mkdir -p test-results
-            python -m pytest tests/ -v \
-              --cov=src \
-              --cov-report=xml:test-results/coverage.xml \
-              --cov-report=html:test-results/coverage-html \
-              --cov-fail-under=50 \
-              --junitxml=test-results/junit.xml
-      - store_test_results:
-          path: test-results/junit.xml
-      - store_artifacts:
-          path: test-results/coverage-html/index.html
-          destination: coverage-report/index.html
+orbs:
+  usage-reporter: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/usage-reporter.yml
 
-  cli-smoke-test:
-    docker:
-      - image: cimg/python:3.13.5
-    resource_class: small
-    steps:
-      - checkout
-      - run:
-          name: Install package
-          command: pip install -e .
-      - run:
-          name: Verify CLI entry point
-          command: circleci-usage-reporter --help
-      - run:
-          name: Verify all subcommands respond to --help
-          command: |
-            circleci-usage-reporter get --help
-            circleci-usage-reporter merge --help
-            circleci-usage-reporter send-to-datadog --help
-            circleci-usage-reporter send-to-doit --help
-            circleci-usage-reporter create-graph --help
-            circleci-usage-reporter run-analysis --help
-            circleci-usage-reporter store-metrics --help
-      - run:
-          name: Verify standalone module entrypoints
-          command: |
-            python -m src.merge --help
-            python -m src.create_graph --help
-
-  build-docker-image:
-    docker:
-      - image: cimg/base:2023.04
-    steps:
-      - checkout
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run:
-          name: Build docker image
-          command: docker build . -t usage-reporter:latest
-      - run:
-          name: Verify CLI works in container
-          command: docker run --rm usage-reporter --help
-      - run:
-          name: Verify all subcommands work in container
-          command: |
-            docker run --rm usage-reporter get --help
-            docker run --rm usage-reporter merge --help
+parameters:
+  run-weekly-usage:
+    type: boolean
+    default: false
+  apply-schedule:
+    type: boolean
+    default: false
 
 workflows:
   testing:
+    when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
     jobs:
-      - lint-and-test
-      - cli-smoke-test
-      - build-docker-image
+      - usage-reporter/lint-and-test
+      - usage-reporter/cli-smoke-test
+      - usage-reporter/build-docker-image

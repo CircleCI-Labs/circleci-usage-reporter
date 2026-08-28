@@ -38,11 +38,14 @@ def handle(args):
     try:
         csv_files = glob.glob(os.path.join(args.input_dir, '*.csv'))
 
+        quiet = getattr(args, 'quiet', False)
+
         if not csv_files:
             print(f"Error: No CSV files found in {args.input_dir}", file=sys.stderr)
             return 1
 
-        print(f"Found {len(csv_files)} CSV files to merge...")
+        if not quiet:
+            print(f"Found {len(csv_files)} CSV files to merge...")
 
         # Ensure output directory exists
         output_dir = os.path.dirname(args.output)
@@ -51,7 +54,8 @@ def handle(args):
 
         with open(args.output, 'w') as merged_file:
             for i, csv_file in enumerate(csv_files):
-                print(f"Processing {csv_file}...")
+                if not quiet:
+                    print(f"Processing {csv_file}...")
                 with open(csv_file, 'r') as f:
                     # Skip header if not the first file
                     if i > 0:
@@ -59,7 +63,8 @@ def handle(args):
                     for line in f:
                         merged_file.write(line)
 
-        print(f"Merged {len(csv_files)} files into {args.output}")
+        if not quiet:
+            print(f"Merged {len(csv_files)} files into {args.output}")
         return 0
 
     except Exception as e:
