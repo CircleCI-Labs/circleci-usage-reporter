@@ -520,7 +520,7 @@ jobs:
       - checkout
       - rank-top-usage
 
-  apply:
+  apply-weekly-schedule:
     description: >
       terraform apply the weekly schedule trigger. Auth is CIRCLE_TOKEN
       (context circle-token-cci-labs on the workflow job). Parent workflow

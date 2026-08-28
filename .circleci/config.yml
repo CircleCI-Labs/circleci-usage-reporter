@@ -4,7 +4,7 @@ version: 2.1
 # Org must allow-list https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/
 # Pipeline parameters are not visible inside the orb; pass python-image at each call.
 orbs:
-  tf-schedule: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/tf-schedule.yml
+  usage-reporter: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/usage-reporter.yml
 
 parameters:
   org_id:
@@ -32,14 +32,14 @@ parameters:
 jobs:
   generate-usage-report:
     executor:
-      name: tf-schedule/python-large
+      name: usage-reporter/python-large
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
-      - tf-schedule/install-requirements
-      - tf-schedule/get-previous-month-usage:
+      - usage-reporter/install-requirements
+      - usage-reporter/get-previous-month-usage:
           org-id: << pipeline.parameters.org_id >>
-      - tf-schedule/run-create-graph
+      - usage-reporter/run-create-graph
       - persist_to_workspace:
           root: /tmp/reports
           paths:
@@ -49,13 +49,13 @@ jobs:
 
   send-metrics-to-datadog:
     executor:
-      name: tf-schedule/python-small
+      name: usage-reporter/python-small
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - tf-schedule/install-requirements
+      - usage-reporter/install-requirements
       - run:
           name: Send metrics to Datadog
           command: circleci-usage-reporter send-to-datadog /tmp/merged.csv
@@ -65,13 +65,13 @@ jobs:
       analysis-type:
         type: string
     executor:
-      name: tf-schedule/python-large
+      name: usage-reporter/python-large
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - tf-schedule/run-analysis-report:
+      - usage-reporter/run-analysis-report:
           analysis-type: << parameters.analysis-type >>
           job-name: << pipeline.parameters.job_name >>
           cost-per-credit: << pipeline.parameters.cost_per_credit >>
@@ -81,7 +81,7 @@ jobs:
 
   gather-artifacts:
     executor:
-      name: tf-schedule/python-small
+      name: usage-reporter/python-small
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
@@ -92,13 +92,13 @@ jobs:
 
   send-metrics-to-doit:
     executor:
-      name: tf-schedule/python-small
+      name: usage-reporter/python-small
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
       - attach_workspace:
           at: /tmp
-      - tf-schedule/install-python-deps:
+      - usage-reporter/install-python-deps:
           pip: pip3
       - run:
           name: Send metrics to DoiT
@@ -106,22 +106,22 @@ jobs:
 
   weekly-store-metrics:
     executor:
-      name: tf-schedule/python-large
+      name: usage-reporter/python-large
       image: << pipeline.parameters.python-image >>
     steps:
       - checkout
-      - tf-schedule/install-requirements
-      - tf-schedule/get-previous-week-usage:
+      - usage-reporter/install-requirements
+      - usage-reporter/get-previous-week-usage:
           org-id: << pipeline.parameters.org_id >>
-      - tf-schedule/run-store-metrics
+      - usage-reporter/run-store-metrics
 
 workflows:
   test:
     when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
     jobs:
-      - tf-schedule/lint-and-test:
+      - usage-reporter/lint-and-test:
           python-image: << pipeline.parameters.python-image >>
-      - tf-schedule/cli-smoke-test:
+      - usage-reporter/cli-smoke-test:
           python-image: << pipeline.parameters.python-image >>
 
   weekly-usage:
@@ -158,14 +158,14 @@ workflows:
             - generate-resource-class-analysis: terminal
       - weekly-store-metrics:
           context: *my-context
-      - tf-schedule/weekly-top-usage:
+      - usage-reporter/weekly-top-usage:
           context: &circle-token-cci-labs
             - circle-token-cci-labs
           python-image: << pipeline.parameters.python-image >>
 
-  apply-tf-schedule:
+  apply-weekly-schedule:
     when: pipeline.parameters.apply-schedule
     jobs:
-      - tf-schedule/apply:
+      - usage-reporter/apply-weekly-schedule:
           context: *circle-token-cci-labs
           pipeline-id: << pipeline.parameters.pipeline-definition-id >>

@@ -10,7 +10,7 @@
 version: 2.1
 
 orbs:
-  tf-schedule: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/tf-schedule.yml
+  usage-reporter: https://raw.githubusercontent.com/CircleCI-Labs/circleci-usage-reporter/<< pipeline.git.revision >>/.circleci/orbs/usage-reporter.yml
 
 parameters:
   run-weekly-usage:
@@ -24,9 +24,9 @@ workflows:
   testing:
     when: not (pipeline.parameters.run-weekly-usage or pipeline.parameters.apply-schedule)
     jobs:
-      - tf-schedule/lint-and-test
-      - tf-schedule/cli-smoke-test
-      - tf-schedule/build-docker-image
-      - tf-schedule/weekly-top-usage:
+      - usage-reporter/lint-and-test
+      - usage-reporter/cli-smoke-test
+      - usage-reporter/build-docker-image
+      - usage-reporter/weekly-top-usage:
           context:
             - circle-token-cci-labs
