@@ -1,7 +1,7 @@
-# Unit tests, CLI smoke, Docker build, and one live top-N job.
-# weekly-top-usage runs top-workflows then top-jobs in the same job so they
-# share one Usage API export (10 requests/hour/org). Do not add another
-# Usage export job on this pipeline.
+# Unit tests, CLI smoke, and Docker build only.
+# Live top-N (weekly-top-usage) runs on the OAuth config.yml test workflow
+# so context circle-token-cci-labs is available. Do not add a Usage export
+# job here — one export per hour-window (10/org).
 #
 # Shared jobs/commands live in the URL orb. python-image default is the orb
 # executor default (pipeline parameters are not visible inside URL orbs).
@@ -27,6 +27,3 @@ workflows:
       - usage-reporter/lint-and-test
       - usage-reporter/cli-smoke-test
       - usage-reporter/build-docker-image
-      - usage-reporter/weekly-top-usage:
-          context:
-            - circle-token-cci-labs

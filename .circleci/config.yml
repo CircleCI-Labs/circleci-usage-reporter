@@ -123,6 +123,12 @@ workflows:
           python-image: << pipeline.parameters.python-image >>
       - usage-reporter/cli-smoke-test:
           python-image: << pipeline.parameters.python-image >>
+      # Live top-N on OAuth so context circle-token-cci-labs (CIRCLE_TOKEN) resolves.
+      # Not on the GitHub App pipeline — that org has no such context.
+      - usage-reporter/weekly-top-usage:
+          context: &circle-token-cci-labs
+            - circle-token-cci-labs
+          python-image: << pipeline.parameters.python-image >>
 
   weekly-usage:
     when: pipeline.parameters.run-weekly-usage
@@ -159,8 +165,7 @@ workflows:
       - weekly-store-metrics:
           context: *my-context
       - usage-reporter/weekly-top-usage:
-          context: &circle-token-cci-labs
-            - circle-token-cci-labs
+          context: *circle-token-cci-labs
           python-image: << pipeline.parameters.python-image >>
 
   apply-weekly-schedule:

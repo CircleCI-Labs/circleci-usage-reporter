@@ -509,7 +509,7 @@ jobs:
   weekly-top-usage:
     description: >
       Live top-workflows / top-jobs in one job (one Usage export). Used on
-      the weekly schedule and once on the PR pipeline. Attach context
+      the OAuth test workflow and weekly schedule. Attach context
       circle-token-cci-labs at the workflow call site.
     parameters:
       python-image: *python-image-param
